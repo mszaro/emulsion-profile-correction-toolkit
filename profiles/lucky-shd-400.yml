@@ -1,0 +1,55 @@
+# Lucky SHD 400, scanned by a lab as if it were a Kodak or Fuji stock.
+name: Lucky SHD 400
+
+# Blue sags through the upper midtones while the whites stay clean, so the
+# scans look shot through a yellow filter, and red rides a little high. Each
+# roll is balanced toward how Superia renders neutral, tone by tone: by the
+# film's own cast below, then by up to a stop more for how its lab session
+# drifted.
+reference: fujifilm-superia
+roll_balance: 1.0
+roll_balance_limit: 1.0
+
+# The film's own cast, per tone, as [red, green, blue] stops, measured by
+# tools/measure_film.rb against FujiFilm Superia 200 and 400 from 3 rolls:
+#   49602 Lucky SHD 400
+#   49603 Lucky SHD 400
+#   49604 Lucky SHD 400
+film_gains:
+  - [0.112, 0.030, -0.596]
+  - [-0.016, 0.090, -0.666]
+  - [0.105, 0.006, -0.291]
+  - [-0.966, 0.267, 1.124]
+  - [-0.612, 0.178, 1.484]
+  - [-0.416, 0.097, 1.694]
+  - [-0.346, 0.020, 1.812]
+  - [-0.060, 0.012, 0.087]
+
+# Then each frame on its own, since the lab balanced every frame differently,
+# some by two stops or more.
+frame_balance: 1.0
+frame_balance_limit: 2.5
+
+# Tones come back a little bunched toward the highlights.
+roll_tone: 0.5
+
+# Once balanced its colour is not squashed, so the gamut fit has nothing to do.
+roll_fit: 0.0
+healthy_spread: 0.70
+
+# The frame balance above does this job, so the older balance is off.
+neutral: 0.0
+wb: 0.0
+wb_clamp: 1.8
+shadow_wb: 0.8
+
+target_saturation: 0.26
+max_vibrance: 1.5
+knee: 0.22
+
+black: 0.4
+white: 99.7
+max_stretch: 3.2
+contrast: 0.10
+
+chroma: 0.7

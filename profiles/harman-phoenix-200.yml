@@ -1,0 +1,59 @@
+# Harman Phoenix I 200, scanned by a lab as if it were a Kodak or Fuji stock.
+name: Harman Phoenix 200
+
+# Green and blue come back with black floors 20 to 35 levels above red, which
+# is clipped, so the shadows go green. The highlights tip pink. Each roll is
+# balanced toward how Superia renders neutral, tone by tone: by the film's own
+# cast below, then by up to a stop more for how its lab session drifted.
+reference: fujifilm-superia
+roll_balance: 1.0
+roll_balance_limit: 1.0
+
+# The film's own cast, per tone, as [red, green, blue] stops, measured by
+# tools/measure_film.rb against FujiFilm Superia 200 and 400 from 3 rolls:
+#   49605 Ilford Harman Phoenix
+#   49606 Ilford Harman Phoenix
+#   49607 Ilford Harman Phoenix
+film_gains:
+  - [-0.369, 0.239, -1.043]
+  - [0.093, -0.070, 0.473]
+  - [0.357, -0.093, 0.136]
+  - [0.372, -0.060, -0.314]
+  - [0.223, -0.028, -0.379]
+  - [0.030, 0.019, -0.308]
+  - [-0.349, 0.106, 0.192]
+  - [-0.235, 0.081, 0.002]
+
+# Then each frame on its own, since the lab balanced every frame a little
+# differently. Phoenix frames drift by half a stop or so; anything larger is
+# the scene, such as a frame full of leaves, and is left alone.
+frame_balance: 1.0
+frame_balance_limit: 0.6
+
+# Highlights come back bunched near white with the midtones pushed up to
+# meet them, so the roll is given Superia's tonal spread.
+roll_tone: 1.0
+
+# Once balanced its colour is not squashed, so the gamut fit has nothing to do.
+roll_fit: 0.0
+healthy_spread: 0.70
+
+# The frame balance above does this job, so the older balance is off.
+neutral: 0.0
+wb: 0.0
+wb_clamp: 1.6
+shadow_wb: 0.8
+
+# Saturated film once balanced, so the boost only lifts a flat frame.
+target_saturation: 0.26
+max_vibrance: 1.5
+knee: 0.22
+
+# Blacks are lifted and whites held back, so each frame is stretched.
+black: 0.4
+white: 99.7
+max_stretch: 3.2
+contrast: 0.10
+
+# Coarse grain with a colour speckle in the lifted shadows.
+chroma: 0.7
