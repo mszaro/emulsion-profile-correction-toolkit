@@ -26,9 +26,18 @@ module Emulsion
       factor = 1 if factor < 1
       inner = inner.subsample(factor, factor) if factor > 1
 
-      raw = inner.cast(:float).write_to_memory.unpack("f*")
-      @pixels = raw.each_slice(inner.bands).map { |px| px.first(3) }
-      @lumas = @pixels.map { |px| luma(px) }
+      # Kept in memory, since the vibrance search reuses it at every step.
+      @sample_image = inner.cast(:float).copy_memory
+      bands = @sample_image.bands
+      raw = @sample_image.write_to_memory.unpack("f*")
+
+      @pixels = []
+      @lumas = []
+      raw.each_slice(bands) do |px|
+        px = px.first(3) if bands != 3
+        @pixels << px
+        @lumas << luma(px)
+      end
     end
 
     def luma(px)
@@ -38,6 +47,11 @@ module Emulsion
     def saturation(px)
       mx = px.max
       mx <= 1e-6 ? 0.0 : (mx - px.min) / mx
+    end
+
+    # Per-pixel saturation, computed once for mean_saturation and neutral_at.
+    def sats
+      @sats ||= pixels.map { |px| saturation(px) }
     end
 
     # Linear interpolation between neighbouring ranks, as numpy does.
@@ -119,26 +133,48 @@ module Emulsion
     # Mean colour of the near-neutral pixels around one brightness, and how far
     # to trust it. A cast pushes every pixel the same way while scene colour
     # points all over, so trust comes from how well the colours line up.
+    # Plain index loops, since this runs over every sampled pixel per anchor.
     def neutral_at(anchor, width: 0.55, sat_pct: 30, minimum: 400)
       lo = anchor * (1.0 - width)
       hi = anchor * (1.0 + width) + 0.004
-      band = pixels.each_with_index
-                   .select { |_, i| lumas[i] >= lo && lumas[i] < hi }
-                   .map(&:first)
+
+      px = pixels
+      ys = lumas
+      st = sats
+      band = []
+      band_sats = []
+      i = 0
+      n = ys.size
+      while i < n
+        y = ys[i]
+        if y >= lo && y < hi
+          band << px[i]
+          band_sats << st[i]
+        end
+        i += 1
+      end
       return nil if band.size < minimum
 
-      sats = band.map { |px| saturation(px) }
-      cut = self.class.percentile(sats.sort, sat_pct)
-      neutral = band.each_with_index.select { |_, i| sats[i] <= cut }.map(&:first)
-      return nil if neutral.size < minimum / 3
-
-      sums = neutral.each_with_object([0.0, 0.0, 0.0]) do |px, acc|
-        acc[0] += px[0]
-        acc[1] += px[1]
-        acc[2] += px[2]
+      cut = self.class.percentile(band_sats.sort, sat_pct)
+      sum_r = 0.0
+      sum_g = 0.0
+      sum_b = 0.0
+      count = 0
+      j = 0
+      bn = band.size
+      while j < bn
+        if band_sats[j] <= cut
+          p = band[j]
+          sum_r += p[0]
+          sum_g += p[1]
+          sum_b += p[2]
+          count += 1
+        end
+        j += 1
       end
-      mean = sums.map { |s| s / neutral.size }
+      return nil if count < minimum / 3
 
+      mean = [sum_r / count, sum_g / count, sum_b / count]
       { mean: mean, confidence: coherence_of(band) }
     end
 
@@ -207,46 +243,65 @@ module Emulsion
     end
 
     def mean_saturation
-      @mean_saturation ||= pixels.sum { |px| saturation(px) } / pixels.size
+      @mean_saturation ||= sats.sum / pixels.size
     end
 
     # The vibrance amount that lands this frame on the target saturation, found
     # by bisecting on the sampled pixels. Frames already there are left alone.
     def vibrance_for(target, knee, limit)
       return 1.0 if target <= 0 || pixels.empty?
+      prepare_vibrance(knee)
       lo = 1.0
       hi = limit
-      return lo if predicted_saturation(lo, knee) >= target
-      return hi if predicted_saturation(hi, knee) <= target
+      return lo if predicted_saturation(lo) >= target
+      return hi if predicted_saturation(hi) <= target
       20.times do
         mid = (lo + hi) / 2.0
-        predicted_saturation(mid, knee) < target ? lo = mid : hi = mid
+        predicted_saturation(mid) < target ? lo = mid : hi = mid
       end
       (lo + hi) / 2.0
     end
 
-    # What the mean saturation would become at this vibrance amount, measured
-    # in sRGB because the target is a display-space figure.
-    def predicted_saturation(amount, knee)
-      total = 0.0
-      pixels.each do |px|
-        y = luma(px)
-        next if y <= 1e-6
-        mx = px.max
-        mn = px.min
-        ratio = ((mx - mn) / y) / knee
-        k = 1.0 + (amount - 1.0) / (1.0 + ratio * ratio)
-        hi = encode(y + (mx - y) * k)
-        lo = encode(y + (mn - y) * k)
-        total += hi <= 1e-6 ? 0.0 : (hi - lo) / hi
-      end
-      total / pixels.size
+    # The parts of predicted_saturation that do not change with the amount,
+    # built once as vips images since the bisection asks about twenty times.
+    def prepare_vibrance(knee)
+      return if @vibrance_knee == knee
+      @vibrance_knee = knee
+
+      img = rgb_image
+      y = (img * LUMA).bandmean * 3.0
+      r, g, b = img[0], img[1], img[2]
+      mx = (r > g).ifthenelse(r, g)
+      mx = (mx > b).ifthenelse(mx, b)
+      mn = (r < g).ifthenelse(r, g)
+      mn = (mn < b).ifthenelse(mn, b)
+
+      safe_y = (y < 1e-6).ifthenelse(1e-6, y)
+      ratio = ((mx - mn) / safe_y) / knee
+
+      @vib_y = y.copy_memory
+      @vib_d_hi = (mx - y).copy_memory
+      @vib_d_lo = (mn - y).copy_memory
+      @vib_weight = ((ratio * ratio + 1.0)**-1.0).copy_memory
+      @vib_dead = (y <= 1e-6).copy_memory
     end
 
-    def encode(v)
-      return 0.0 if v <= 0.0
-      return 1.0 if v >= 1.0
-      v <= 0.0031308 ? v * 12.92 : 1.055 * (v**(1 / 2.4)) - 0.055
+    # What the mean saturation would become at this vibrance amount, measured
+    # in sRGB because the target is a display-space figure.
+    def predicted_saturation(amount)
+      k = @vib_weight * (amount - 1.0) + 1.0
+      hi = Colour.to_srgb(@vib_y + @vib_d_hi * k)
+      lo = Colour.to_srgb(@vib_y + @vib_d_lo * k)
+
+      safe_hi = (hi < 1e-6).ifthenelse(1e-6, hi)
+      contribution = (hi - lo) / safe_hi
+      contribution = (hi <= 1e-6).ifthenelse(0.0, contribution)
+      contribution = @vib_dead.ifthenelse(0.0, contribution)
+      contribution.avg
+    end
+
+    def rgb_image
+      @rgb_image ||= @sample_image.bands == 3 ? @sample_image : @sample_image[0..2]
     end
   end
 end
