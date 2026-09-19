@@ -42,7 +42,7 @@ module Emulsion
     # Green is held fixed as the reference, since something has to define the
     # level. On the one film profiled so far it is also the least damaged.
     def initialize(samples, healthy_spread:, verbose: true)
-      @r, @g, @b, @y = samples
+      @r, @g, @b, @y = samples.r, samples.g, samples.b, samples.y
       @clipped = find_clipping
       @damaged = [@clipped.any? { |c| c[0] }, @clipped.any? { |c| c[1] }]
       @gains = Array.new(BAND_CENTRES.size) { [1.0, 1.0] }   # [red, blue] per band

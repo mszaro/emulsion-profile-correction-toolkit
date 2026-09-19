@@ -2,19 +2,21 @@ require "yaml"
 require "digest"
 
 module Emulsion
-  # Remembers a roll's colour fit, kept next to the output as roll-fit.yml.
+  # Remembers a roll's fits, kept next to the output as roll-fit.yml.
   #
-  # The key covers everything the fit depends on: each source file's path, size
-  # and time, the profile's healthy spread, and a digest of the fitting code, so
-  # changing how the fit works never quietly serves an old answer.
+  # The key covers everything the fits depend on: each source file's path, size
+  # and time, the settings and reference the fits were made against, and a
+  # digest of the fitting code, so changing how a fit works never quietly
+  # serves an old answer.
   module AnalysisCache
     module_function
 
-    VERSION = 3
+    VERSION = 4
 
-    SOURCES = %w[gamut_fit.rb roll_sample.rb].freeze
+    SOURCES = %w[gamut_fit.rb roll_sample.rb colour_balance.rb tone_curve.rb].freeze
 
-    def key(paths, healthy_spread)
+    # Inputs is a hash of whatever else the fits were made from.
+    def key(paths, inputs)
       files = paths.sort.map do |p|
         stat = File.stat(p)
         "#{p}:#{stat.size}:#{stat.mtime.to_i}"
@@ -22,7 +24,7 @@ module Emulsion
       code = SOURCES.map do |name|
         Digest::SHA256.file(File.join(__dir__, name)).hexdigest
       end
-      Digest::SHA256.hexdigest([VERSION, healthy_spread, *code, *files].join("\n"))
+      Digest::SHA256.hexdigest([VERSION, inputs.sort.inspect, *code, *files].join("\n"))
     end
 
     def path(destination)
@@ -42,16 +44,21 @@ module Emulsion
       nil
     end
 
-    # The stored gains are the raw fit, before --roll-fit scales them, so
-    # changing the strength reuses the fit.
-    def save(destination, key, fit)
-      File.write(path(destination), YAML.dump(
-        "key" => key,
-        "gains" => fit.gains,
-        "clipped" => fit.clipped,
-        "spread_before" => fit.spread_before,
-        "spread_after" => fit.spread_after
-      ))
+    # The stored fits are raw, before their strengths scale them, so changing
+    # a strength reuses them. Any fit may be absent.
+    def save(destination, key, fit: nil, balance: nil, tone: nil)
+      data = { "key" => key }
+      data["balance"] = balance.to_h if balance
+      data["tone"] = tone.to_h if tone
+      if fit
+        data["fit"] = {
+          "gains" => fit.gains,
+          "clipped" => fit.clipped,
+          "spread_before" => fit.spread_before,
+          "spread_after" => fit.spread_after
+        }
+      end
+      File.write(path(destination), YAML.dump(data))
     rescue SystemCallError
       # A cache that cannot be written is not worth failing a render over.
       nil

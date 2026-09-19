@@ -1,5 +1,5 @@
 module Emulsion
-  # A few thousand pixels from every frame in a roll, for the colour fit.
+  # A few thousand pixels from every frame in a roll, for the roll-wide fits.
   #
   # Taken by stride rather than by scaling down, since scaling averages
   # neighbours and would narrow the very colour spread being measured.
@@ -7,11 +7,15 @@ module Emulsion
     LUMA = [0.2126, 0.7152, 0.0722].freeze
     INSET = 0.05
 
+    # Channels and luma in 0..255, and how many pixels came from each frame.
+    Pixels = Data.define(:r, :g, :b, :y, :frame_sizes)
+
     def self.collect(paths, per_frame: 6000, verbose: true)
       r = []
       g = []
       b = []
       y = []
+      frame_sizes = []
 
       paths.each_with_index do |path, i|
         print "\r  sampling #{i + 1}/#{paths.size}" if verbose
@@ -30,6 +34,7 @@ module Emulsion
         factor = Math.sqrt(inner.width * inner.height / per_frame.to_f).floor
         inner = inner.subsample(factor, factor) if factor > 1
 
+        before = r.size
         raw = inner.cast(:float).write_to_memory.unpack("f*")
         raw.each_slice(inner.bands) do |px|
           r << px[0]
@@ -37,9 +42,10 @@ module Emulsion
           b << px[2]
           y << (LUMA[0] * px[0] + LUMA[1] * px[1] + LUMA[2] * px[2])
         end
+        frame_sizes << (r.size - before)
       end
       puts if verbose
-      [r, g, b, y]
+      Pixels.new(r: r, g: g, b: b, y: y, frame_sizes: frame_sizes)
     end
   end
 end

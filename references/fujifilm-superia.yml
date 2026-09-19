@@ -1,0 +1,25 @@
+# FujiFilm Superia 200 and 400, measured by tools/measure_reference.rb from 7 rolls:
+#   49608 FujiFilm Superia 200
+#   49609 FujiFilm Superia 200
+#   49610 FujiFilm Superia 200
+#   49611 FujiFilm Superia 400
+#   49612 FujiFilm Superia 400
+#   49613 FujiFilm Superia 400
+#   49614 FujiFilm Superia 400
+name: "FujiFilm Superia 200 and 400"
+
+# Neutral is [red, blue] in stops relative to green, at each tone band.
+tones: [0.003, 0.008, 0.02, 0.05, 0.1, 0.2, 0.4, 0.7]
+neutral:
+  - [0.161, -0.138]
+  - [0.029, 0.031]
+  - [-0.092, -0.003]
+  - [-0.063, -0.229]
+  - [0.077, -0.228]
+  - [0.137, -0.160]
+  - [0.099, 0.052]
+  - [0.034, 0.024]
+
+# Where a typical frame's luma falls, at 1, 5, 10, 25, 50, 75, 90, 95, 99 percent,
+# once stretched between its 0.4 and 99.7 percentiles.
+tone_shape: [0.007, 0.030, 0.055, 0.198, 0.484, 0.741, 0.908, 0.944, 0.989]

@@ -36,6 +36,13 @@ module Emulsion
       # The profile sets the picture, and anything given on the command line wins.
       options = DEFAULTS.merge(profile.settings).merge(flags)
 
+      begin
+        reference = options[:reference] && Reference.load(options[:reference])
+      rescue ArgumentError => e
+        warn e.message
+        return 1
+      end
+
       source = File.expand_path(source)
       unless File.directory?(source)
         warn "not a directory: #{source}"
@@ -62,32 +69,14 @@ module Emulsion
       overrides = load_overrides(options[:overrides])
       puts "profile: #{profile.name}"
 
-      # The roll is fitted once, across every frame, before any frame is written.
-      roll = nil
-      if options[:roll_fit].positive?
-        all = find_files(source, nil)
-        key = AnalysisCache.key(all, profile.healthy_spread)
-        cached = AnalysisCache.load(destination, key)
-        if cached
-          puts "reusing the colour fit for this roll"
-          roll = GamutFit.from_cache(cached)
-        else
-          puts "sampling roll of #{all.size} frames..."
-          samples = RollSample.collect(all)
-          puts "fitting colour to reopen the roll's gamut..."
-          roll = GamutFit.new(samples, healthy_spread: profile.healthy_spread)
-          AnalysisCache.save(destination, key, roll)
-        end
-        roll.strength = options[:roll_fit]
-        puts roll.report
-      end
+      fits = analyse_roll(source, destination, profile, reference, options)
 
       puts "processing #{files.size} frames -> #{destination}"
       files.each_with_index do |path, i|
         name = File.basename(path)
         stem = File.basename(name, ".*")
         frame_options = options.merge(overrides[stem] || {})
-        result = Pipeline.new(frame_options, roll).call(path)
+        result = Pipeline.new(frame_options, reference: reference, **fits).call(path)
         # Render once into memory when a preview is wanted too. Shrinking the
         # unrendered pipeline for the preview ran all of it again, and on a
         # 6144px frame that took 45GB.
@@ -108,6 +97,101 @@ module Emulsion
     end
 
     private
+
+    # The roll is fitted once, across every frame, before any frame is written:
+    # first the colour balance toward the reference, then the tone curve and
+    # the gamut fit, which both see the roll as balanced. Returns the fits
+    # wanted, as the keywords Pipeline takes.
+    def analyse_roll(source, destination, profile, reference, options)
+      want = {
+        balance: reference && options[:roll_balance].positive?,
+        tone: reference&.tone_shape && options[:roll_tone].positive?,
+        fit: options[:roll_fit].positive?
+      }
+      return {} unless want.values.any?
+
+      all = find_files(source, nil)
+      key = AnalysisCache.key(all, healthy_spread: profile.healthy_spread,
+                                   neutral: want[:balance] && reference.neutral,
+                                   film_gains: want[:balance] && options[:film_gains],
+                                   roll_balance_limit: want[:balance] && options[:roll_balance_limit],
+                                   tone_shape: want[:tone] && reference.tone_shape,
+                                   roll_balance: want[:balance] && options[:roll_balance])
+      cached = AnalysisCache.load(destination, key) || {}
+      fits = {}
+      fits[:balance] = ColourBalance.from_cache(cached[:balance]) if want[:balance] && cached[:balance]
+      fits[:tone] = ToneCurve.from_cache(cached[:tone]) if want[:tone] && cached[:tone]
+      fits[:fit] = GamutFit.from_cache(cached[:fit]) if want[:fit] && cached[:fit]
+
+      if want.any? { |name, wanted| wanted && !fits[name] }
+        puts "sampling roll of #{all.size} frames..."
+        sample = RollSample.collect(all)
+        if want[:balance] && !fits[:balance]
+          puts "balancing the roll toward #{reference.name}..."
+          fits[:balance] = ColourBalance.fit_roll(sample, reference.neutral, film: options[:film_gains],
+                                                                             limit: options[:roll_balance_limit])
+        end
+        if fits[:balance]
+          fits[:balance].strength = options[:roll_balance]
+          sample = fits[:balance].apply_to_sample(sample)
+        end
+        fits[:tone] ||= ToneCurve.fit(sample, reference.tone_shape) if want[:tone]
+        if want[:fit] && !fits[:fit]
+          puts "fitting colour to reopen the roll's gamut..."
+          fits[:fit] = GamutFit.new(sample, healthy_spread: profile.healthy_spread)
+        end
+        tune_balance(all, options, fits, reference) if fits[:balance]
+        AnalysisCache.save(destination, key, **fits)
+      else
+        puts "reusing the roll analysis"
+      end
+
+      { balance: :roll_balance, tone: :roll_tone, fit: :roll_fit }.each do |name, setting|
+        next unless fits[name]
+
+        fits[name].strength = options[setting]
+        puts fits[name].report
+      end
+      fits
+    end
+
+    # Frames checked through the whole pipeline when tuning the balance, how
+    # many times, how far the tuning may move the colour in stops, and how
+    # much of each round's measurement it takes, since the tone work multiplies
+    # a correction made this early.
+    TUNE_FRAMES = 8
+    TUNE_ROUNDS = 2
+    TUNE_LIMIT = 0.6
+    TUNE_DAMPING = 0.6
+    TUNE_WIDTH = 640
+
+    # The endpoint stretch and the tone work multiply whatever tint is left in
+    # a frame, so a balance that lands on the reference before them lands warm
+    # after them. This renders a few frames small, measures the greys in the
+    # finished picture, and nudges the roll's balance until they land right.
+    def tune_balance(paths, options, fits, reference)
+      step = [paths.size / TUNE_FRAMES, 1].max
+      frames = paths.each_slice(step).map(&:first).first(TUNE_FRAMES).map do |path|
+        # Into memory, since a thumbnail is read once through and the pipeline
+        # goes over a frame several times.
+        image = Vips::Image.thumbnail(path, TUNE_WIDTH, size: :down).copy_memory
+        image = image[0..2] if image.bands > 3
+        image.cast(:float) / (image.format == :ushort ? 65535.0 : 255.0)
+      end
+      TUNE_ROUNDS.times do
+        rendered = frames.map { |image| Pipeline.new(options, reference: reference, **fits).render(image) }
+        pixels = rendered.flat_map { |image| ColourBalance.frame_pixels(image) }
+        drift = ColourBalance.residual_gains(pixels, reference.neutral, TUNE_LIMIT,
+                                             ColourBalance::FRAME_MIN_PIXELS)
+        break unless drift
+
+        gains = fits[:balance].gains.zip(drift).map do |before, delta|
+          before.zip(delta).map { |a, b| a + b * TUNE_DAMPING }
+        end
+        fits[:balance] = ColourBalance.new(fits[:balance].offsets, gains)
+        fits[:balance].strength = options[:roll_balance]
+      end
+    end
 
     # TIFF and PNG are written at 16 bits, even from an 8-bit scan, so later
     # edits do not turn the stretched levels into banding. JPEG is always 8-bit;
@@ -197,6 +281,24 @@ module Emulsion
                 "Ceiling on the vibrance boost.") { |v| options[:max_vibrance] = v }
         opts.on("--knee FLOAT", Float,
                 "Chroma at which the boost halves. Lower protects colourful subjects.") { |v| options[:knee] = v }
+        opts.on("--reference NAME",
+                "Film to balance the roll toward: #{Reference.available.join(', ')},",
+                "or a file from tools/measure_reference.rb.") { |v| options[:reference] = v }
+        opts.on("--roll-balance FLOAT", Float,
+                "Strength of the balance toward the reference, 0 to 1",
+                "(default #{DEFAULTS[:roll_balance]}). Only with a reference.") { |v| options[:roll_balance] = v }
+        opts.on("--roll-balance-limit STOPS", Float,
+                "How far a roll may drift from its film's measured cast, easing",
+                "off toward this many stops (default #{DEFAULTS[:roll_balance_limit]}).") { |v| options[:roll_balance_limit] = v }
+        opts.on("--frame-balance FLOAT", Float,
+                "Strength of each frame's own balance toward the reference,",
+                "after the roll's, 0 to 1. Only with a reference.") { |v| options[:frame_balance] = v }
+        opts.on("--frame-balance-limit STOPS", Float,
+                "How far the frame balance may move a frame, easing off",
+                "toward this many stops (default #{DEFAULTS[:frame_balance_limit]}).") { |v| options[:frame_balance_limit] = v }
+        opts.on("--roll-tone FLOAT", Float,
+                "Strength of the roll's tone curve toward the reference's",
+                "tones, 0 to 1. Only with a reference.") { |v| options[:roll_tone] = v }
         opts.on("--roll-fit FLOAT", Float,
                 "Strength of the whole-roll colour fit, 0 to 1 (default #{DEFAULTS[:roll_fit]}).",
                 "A roll that is already healthy fits to no change.") { |v| options[:roll_fit] = v }

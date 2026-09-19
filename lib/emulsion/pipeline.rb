@@ -1,21 +1,31 @@
 module Emulsion
   # The correction itself, for one frame:
   #
-  #   roll fit -> white balance -> vibrance -> white balance -> endpoints ->
-  #   contrast -> denoise
+  #   colour balance -> roll fit -> white balance -> vibrance ->
+  #   white balance -> endpoints -> tone curve -> contrast -> denoise
   class Pipeline
     LUMA = [0.2126, 0.7152, 0.0722].freeze
     # The second balancing pass is gentle. At full strength it doubles up on
     # the first and pushes corrected bands past neutral.
     SECOND_PASS = 0.35
 
-    def initialize(options, roll = nil)
+    # The roll's fits, any of which may be nil: its colour balance and tone
+    # curve toward the reference, and its gamut fit.
+    def initialize(options, balance: nil, tone: nil, fit: nil, reference: nil)
       @o = options
-      @roll = roll
+      @balance = balance
+      @tone = tone
+      @roll = fit
+      @reference = reference
     end
 
     def call(path)
-      srgb_in = apply_roll_fit(Colour.load(path))
+      render(Colour.load(path))
+    end
+
+    # The correction on a loaded frame, a float sRGB image in 0..1.
+    def render(scan)
+      srgb_in = apply_roll_fit(balance(scan))
 
       # Colour is measured and corrected in linear light, where a gain is what
       # it claims to be. Tone work happens later, in display space.
@@ -35,11 +45,25 @@ module Emulsion
       points = Measurements.new(srgb).endpoints(@o[:black], @o[:white], @o[:neutral],
                                                 max_stretch: @o[:max_stretch])
       srgb = apply_endpoints(srgb, points)
+      srgb = @tone.apply(srgb) if @tone
       srgb = s_curve(srgb, @o[:contrast])
       denoise_chroma(srgb, @o[:chroma], chroma_radius_for(srgb))
     end
 
     private
+
+    # The roll's colour balance, then this frame's own, which takes out how far
+    # the lab's balance drifted on this frame in particular.
+    def balance(scan)
+      scan = @balance.apply(scan) if @balance
+      return scan unless @reference && @o[:frame_balance].positive?
+
+      frame = ColourBalance.fit_frame(scan, @reference.neutral, limit: @o[:frame_balance_limit])
+      return scan unless frame
+
+      frame.strength = @o[:frame_balance]
+      frame.apply(scan)
+    end
 
     # The roll's colour fit: a per-channel gain that varies with brightness.
     # Indexed on blurred luminance, so neighbouring grains get the same gain

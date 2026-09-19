@@ -9,7 +9,9 @@ module Emulsion
 
     REQUIRED = %i[black white neutral wb wb_clamp shadow_wb target_saturation
                   max_vibrance knee max_stretch contrast chroma healthy_spread].freeze
-    OPTIONAL = %i[name saturation chroma_radius roll_fit].freeze
+    OPTIONAL = %i[name saturation chroma_radius roll_fit reference roll_balance
+                  roll_balance_limit film_gains frame_balance frame_balance_limit
+                  roll_tone].freeze
 
     attr_reader :id, :name, :settings, :healthy_spread
 
@@ -41,6 +43,13 @@ module Emulsion
 
       missing = REQUIRED - data.keys
       raise ArgumentError, "profile #{id} is missing: #{missing.join(', ')}" if missing.any?
+
+      gains = data[:film_gains]
+      unless gains.nil? || (gains.is_a?(Array) && gains.size == ColourBalance::TONES.size &&
+                            gains.all? { |g| g.is_a?(Array) && g.size == 3 && g.all?(Numeric) })
+        raise ArgumentError, "profile #{id} needs film_gains as [red, green, blue] for each of " \
+                             "#{ColourBalance::TONES.size} tones; tools/measure_film.rb writes them"
+      end
 
       @id = id
       @name = data[:name] || id

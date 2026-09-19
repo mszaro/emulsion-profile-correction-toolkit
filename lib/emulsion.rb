@@ -11,6 +11,9 @@ require_relative "emulsion/measurements"
 require_relative "emulsion/profile"
 require_relative "emulsion/analysis_cache"
 require_relative "emulsion/roll_sample"
+require_relative "emulsion/colour_balance"
+require_relative "emulsion/tone_curve"
+require_relative "emulsion/reference"
 require_relative "emulsion/gamut_fit"
 require_relative "emulsion/pipeline"
 
@@ -22,6 +25,13 @@ module Emulsion
     format: nil,
     quality: 98,
     roll_fit: 1.0,
+    reference: nil,
+    roll_balance: 1.0,
+    roll_balance_limit: 1.0,
+    film_gains: nil,
+    frame_balance: 0.0,
+    frame_balance_limit: 2.5,
+    roll_tone: 0.0,
     saturation: nil,
     chroma_radius: nil
   }.freeze
