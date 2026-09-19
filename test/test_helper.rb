@@ -1,0 +1,28 @@
+require "minitest/autorun"
+require "tmpdir"
+require_relative "../lib/emulsion"
+require_relative "../lib/emulsion/cli"
+
+module TestImages
+  module_function
+
+  # A float sRGB image built from a block returning linear [r, g, b] per pixel.
+  def linear_image(width, height)
+    values = []
+    height.times do |y|
+      width.times { |x| values.concat(yield(x, y)) }
+    end
+    linear = Vips::Image.new_from_memory(values.pack("f*"), width, height, 3, :float)
+    Emulsion::Colour.to_srgb(linear).copy(interpretation: :srgb)
+  end
+
+  # Stops of red and blue against green for one linear pixel.
+  def stops(px)
+    [Math.log2(px[0] / px[1]), Math.log2(px[2] / px[1])]
+  end
+
+  def mean_pixel(image, left, top, width, height)
+    area = Emulsion::Colour.to_linear(image.extract_area(left, top, width, height))
+    (0..2).map { |c| area[c].avg }
+  end
+end
