@@ -40,19 +40,24 @@ Measured on one 6144x4096 frame, against the same frame written at 16 bits:
 | --- | --- | --- |
 | TIFF, 16 bit | 124 MB | lossless |
 | JPEG 2000, 16 bit, lossless | 81 MB | lossless |
-| TIFF, 8 bit | 35 MB | 51.3 dB |
+| HEIC, 8 bit, quality 100 | 43 MB | 53.0 dB |
+| TIFF, 8 bit | 34 MB | 53.0 dB |
 | HEIC, 8 bit, quality 95 | 17 MB | 49.3 dB |
 | JPEG, quality 98 | 15 MB | 46.3 dB |
 | JPEG, quality 95 | 10 MB | 43.1 dB |
 
-HEIC gives the most picture for the size and opens everywhere on Apple
-platforms, which makes it a good default for finished frames; 16 bit TIFF is
-worth its size only for frames headed back into an editor. HEIC takes 8 bits
-here even though the format allows more, since this libheif's encoder writes
-10 and 12 bit files that measure worse than its 8 bit ones (39.5 dB at 12
-bits against 50.1 dB at 8). Its decoder also cannot read a full size HEIC
-back, though macOS opens the same files, so `--previews` is the easy way to
-get something to look through after a run.
+53.0 dB is the ceiling for anything 8 bit, since that is what rounding to 8
+bits costs on its own. HEIC gives the most picture for the size and opens
+everywhere on Apple platforms, which makes it a good home for finished
+frames, while 16 bit TIFF earns its size only for frames headed back into an
+editor. Quality 95 and 100 ask this HEVC encoder for the same file, so
+quality 100 is read as lossless, which is the only step up it offers.
+
+HEIC takes 8 bits by default even though the format allows more, since this
+libheif's encoder writes 10 and 12 bit files that measure worse than its 8
+bit ones (39.5 dB at 12 bits against 50.1 dB at 8). Its decoder also cannot
+read a full size HEIC back, though macOS opens the same files, so
+`--previews` is the easy way to get something to look through after a run.
 
 `bundle exec rake` runs the tests.
 

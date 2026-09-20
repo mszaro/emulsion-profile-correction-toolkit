@@ -283,7 +283,7 @@ module Emulsion
         quantise(result, 8).jpegsave(partial, Q: quality, subsample_mode: :off,
                                               optimize_coding: true)
       when "heic"
-        quantise(result, bits).heifsave(partial, Q: quality, bitdepth: bits,
+        quantise(result, bits).heifsave(partial, Q: quality, bitdepth: bits, lossless: quality >= 100,
                                                  compression: :hevc, subsample_mode: :off)
       when "jp2"
         quantise(result, bits).jp2ksave(partial, Q: quality, lossless: quality >= 100,
@@ -425,7 +425,9 @@ module Emulsion
                 "gradient instead of banding.") { |v| options[:bits] = v }
         opts.on("--quality N", Integer,
                 "Quality for the lossy formats (default #{DEFAULTS[:quality]}).",
-                "100 asks JPEG 2000 for lossless. Always 4:4:4.") { |v| options[:quality] = v }
+                "100 asks HEIC and JPEG 2000 for lossless, which on HEIC is",
+                "the only step up: its encoder gives the same file at 95 and",
+                "at 100. Always 4:4:4.") { |v| options[:quality] = v }
         opts.on("--previews", "--jpeg", "Also write 1600px preview JPEGs.") { |v| options[:previews] = v }
         opts.on("--only GLOB", "Filter frames, for example '0000[45]*'.") { |v| options[:only] = v }
         opts.on("--overrides FILE", "YAML of per-frame settings, keyed by filename",

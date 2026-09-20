@@ -73,6 +73,14 @@ class OutputFormatTest < Minitest::Test
     assert_equal 1, (0...32).map { |y| deep.getpoint(5, y).first }.uniq.size
   end
 
+  # The HEVC encoder gives the same file at 95 and at 100, so lossless is the
+  # only way to ask it for more.
+  def test_quality_one_hundred_asks_for_lossless
+    lossy = save("heic", quality: 95) { |_, size| size }
+    lossless = save("heic", quality: 100) { |_, size| size }
+    assert_operator lossless, :>, lossy
+  end
+
   def test_format_names_people_actually_type
     assert_equal "jpeg", @cli.send(:output_format, "x.tiff", { format: "jpg" })
     assert_equal "heic", @cli.send(:output_format, "x.tiff", { format: "heif" })
