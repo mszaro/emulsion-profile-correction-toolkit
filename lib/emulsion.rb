@@ -17,6 +17,8 @@ require_relative "emulsion/colour_balance"
 require_relative "emulsion/tone_curve"
 require_relative "emulsion/dynamics"
 require_relative "emulsion/detail"
+require_relative "emulsion/lost_colour"
+require_relative "emulsion/chroma_map"
 require_relative "emulsion/reference"
 require_relative "emulsion/gamut_fit"
 require_relative "emulsion/pipeline"
@@ -47,6 +49,9 @@ module Emulsion
     flat_field: 1.0,
     recovery: 1.0,
     sharpness: 0.7,
+    lost_colour: 0.0,
+    chroma_map: nil,
+    chroma_shape: 0.0,
     saturation: nil,
     chroma_radius: nil
   }.freeze

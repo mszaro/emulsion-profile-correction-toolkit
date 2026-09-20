@@ -102,6 +102,38 @@ its profile, from as many and as varied rolls as you have:
 bundle exec ruby tools/measure_film.rb lucky-shd-400 ~/scans/roll1 ~/scans/roll2 ~/scans/roll3
 ```
 
+## Where a channel ran out
+
+Balancing greys onto the reference gets a film most of the way, because greys
+are what the balance is measured on. Saturated subjects stay where the film's
+own dyes left them: Lucky's sunlit limestone arrives with its blue two and a
+half stops under where a grey of the same brightness sits, against a third of
+a stop for the same stone on Superia. No per-channel gain reaches that, since
+the gain that would fix the stone would turn every grey in the frame blue.
+
+Two stages work on it, both off unless a profile or the command line asks.
+
+`--chroma-shape` bends the film's colour onto the reference's. The spread and
+centre of each film's colour are measured as stops of red and blue against
+green, over the tones between the noise and the clipping, and the straight map
+that takes one onto the other is fitted and kept in the profile. Where a
+channel is exhausted the map reaches it through the channels that are not. It
+is inference: the two films photographed similar places rather than the same
+frames, so the map is only as good as that likeness.
+
+```bash
+bundle exec ruby tools/measure_shape.rb lucky-shd-400 --reference ~/scans/superia1,~/scans/superia2 ~/scans/lucky1 ~/scans/lucky2
+```
+
+`--lost-colour` handles the pixels the map cannot help. How far each pixel's
+blue has fallen below what a grey of that brightness holds is measured against
+the reference, and the pixels that have fallen furthest are eased toward grey,
+never all the way. A blue sky or a red awning in the same frame keeps its
+colour, because its blue still carries something. The map fades out over the
+same measurement, so the two divide the frame between them: the map reshapes
+the colour that survived, and the easing takes the shout out of the colour
+that did not.
+
 ## Beyond the film
 
 Everything above is about the film and the profile it was scanned with. Some
@@ -177,6 +209,12 @@ Lucky's ISO 400 colour negative film. Scans of it look shot through a yellow
 filter: blue sags two to three stops behind green through the upper midtones
 while the whites stay clean, and red rides a little high, so pale blues and
 cyans turn yellow.
+
+On warm subjects in warm light its blue layer records almost nothing at all,
+so how yellow that sunlit stone really was is no longer in the file. The
+profile bends what colour survived onto Superia's shape and eases the rest
+partway toward grey, which is the closest thing to an honest answer the scan
+still supports.
 
 ![Geneva cathedral before and after](examples/000051-before-after.jpg)
 

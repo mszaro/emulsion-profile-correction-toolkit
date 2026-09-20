@@ -96,7 +96,25 @@ module Emulsion
       return scan unless frame
 
       frame.strength = @o[:frame_balance]
-      frame.apply(scan)
+      shape(frame.apply(scan))
+    end
+
+    # Two ways past what per-channel gains can reach, both off unless a
+    # profile or the command line asks: easing toward grey where a channel has
+    # nothing left, and bending the film's colour onto the reference's shape.
+    def shape(scan)
+      wants_map = @reference && @o[:chroma_shape].to_f.positive? && @o[:chroma_map]
+      wants_easing = @reference && @o[:lost_colour].to_f.positive?
+      return scan unless wants_map || wants_easing
+
+      linear = Colour.to_linear(scan)
+      lost = LostColour.lost(linear, (linear * LUMA).bandmean * 3.0, @reference.neutral)
+      if wants_map
+        map = ChromaMap.from_cache(@o[:chroma_map].transform_keys(&:to_sym))
+        map.strength = @o[:chroma_shape]
+        scan = map.apply(scan, lost)
+      end
+      wants_easing ? LostColour.apply(scan, @reference.neutral, @o[:lost_colour]) : scan
     end
 
     # The roll's colour fit: a per-channel gain that varies with brightness.

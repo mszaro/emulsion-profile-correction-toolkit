@@ -25,6 +25,25 @@ film_gains:
   - [-0.346, 0.020, 1.812]
   - [-0.060, 0.012, 0.087]
 
+# How this film's colour sits against FujiFilm Superia 200 and 400, after the gains
+# above have done what they can, measured by tools/measure_shape.rb from:
+#   49602 Lucky SHD 400
+#   49603 Lucky SHD 400
+#   49604 Lucky SHD 400
+# against:
+#   49612 FujiFilm Superia 400
+#   49613 FujiFilm Superia 400
+chroma_map:
+  matrix: [1.2843, 0.6252]
+  offset: [-0.6172, 0.3472]
+
+# The map above is bent onto Superia in full, and then the pixels whose blue
+# arrived with nothing in it are eased partway toward grey. The two work on
+# different pixels: the map reshapes the colour that survived, and the easing
+# takes the shout out of the colour that did not.
+chroma_shape: 1.0
+lost_colour: 0.5
+
 # Then each frame on its own, since the lab balanced every frame differently,
 # some by two stops or more.
 frame_balance: 1.0
