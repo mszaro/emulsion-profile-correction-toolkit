@@ -212,24 +212,52 @@ module Emulsion
       end
     end
 
-    # TIFF and PNG are written at 16 bits, even from an 8-bit scan, so later
-    # edits do not turn the stretched levels into banding. JPEG is always 8-bit;
-    # quality 98 measures 45.8 dB against the 16-bit render, where 95 gives 40.7.
     FORMATS = {
       "tiff" => ".tiff", "tif" => ".tiff",
       "jpeg" => ".jpg", "jpg" => ".jpg",
-      "png" => ".png"
+      "png" => ".png",
+      "heic" => ".heic", "heif" => ".heic",
+      "jp2" => ".jp2", "jpeg2000" => ".jp2"
     }.freeze
+
+    # What each format can hold, and what it gets when nothing is asked for.
+    # A correction stretches levels a long way, so depth is worth having where
+    # a format carries it well. HEIC is the exception: its deeper modes here
+    # measure 39.5 dB at 12 bits against 50.1 dB at 8, so the encoder is
+    # mangling them and 8 is what it gets unless --bits says otherwise.
+    DEPTHS = {
+      "tiff" => [8, 16], "png" => [8, 16], "jp2" => [8, 16],
+      "heic" => [8, 10, 12], "jpeg" => [8]
+    }.freeze
+    NATURAL_DEPTH = { "tiff" => 16, "png" => 16, "jp2" => 16, "heic" => 8, "jpeg" => 8 }.freeze
+
+    # Rounding a stretched frame down to 8 bits can band a clear sky, so a
+    # little noise goes in first and the step becomes grain instead.
+    DITHER = 0.4
 
     # Match the input unless told otherwise, so a JPEG scan comes back a JPEG.
     def output_format(source_path, options)
-      return options[:format] if options[:format]
+      return FORMATS.key?(options[:format]) ? canonical(options[:format]) : options[:format] if options[:format]
 
       case File.extname(source_path).downcase
       when ".jpg", ".jpeg" then "jpeg"
       when ".png" then "png"
+      when ".heic", ".heif" then "heic"
+      when ".jp2", ".jpf", ".j2k" then "jp2"
       else "tiff"
       end
+    end
+
+    # tif and jpg and jpeg2000 all name formats this already knows.
+    def canonical(format)
+      { "tif" => "tiff", "jpg" => "jpeg", "heif" => "heic", "jpeg2000" => "jp2" }.fetch(format, format)
+    end
+
+    def depth_for(format, bits)
+      offered = DEPTHS.fetch(format, [8])
+      return NATURAL_DEPTH.fetch(format, 8) unless bits
+
+      offered.select { |d| d <= bits }.max || offered.min
     end
 
     # Written under a temporary name and renamed when complete, so an
@@ -238,22 +266,43 @@ module Emulsion
       format = output_format(source_path, options)
       path = File.join(destination, stem + FORMATS.fetch(format))
       partial = "#{path}.partial"
-
-      case format
-      when "jpeg"
-        # 4:4:4, because chroma subsampling smears grain into coloured blocks.
-        (result * 255).cast(:uchar)
-          .jpegsave(partial, Q: options[:quality], subsample_mode: :off,
-                             optimize_coding: true)
-      when "png"
-        (result * 65535).cast(:ushort).pngsave(partial, compression: 6)
-      else
-        (result * 65535).cast(:ushort).tiffsave(partial, compression: :lzw)
-      end
+      save(result, partial, format, options)
       File.rename(partial, path)
       path
     ensure
       File.delete(partial) if partial && File.exist?(partial)
+    end
+
+    def save(result, partial, format, options)
+      bits = depth_for(format, options[:bits])
+      quality = options[:quality]
+      case format
+      # Chroma subsampling smears grain into coloured blocks, so it stays off
+      # wherever a format would otherwise apply it.
+      when "jpeg"
+        quantise(result, 8).jpegsave(partial, Q: quality, subsample_mode: :off,
+                                              optimize_coding: true)
+      when "heic"
+        quantise(result, bits).heifsave(partial, Q: quality, bitdepth: bits,
+                                                 compression: :hevc, subsample_mode: :off)
+      when "jp2"
+        quantise(result, bits).jp2ksave(partial, Q: quality, lossless: quality >= 100,
+                                                 subsample_mode: :off)
+      when "png"
+        quantise(result, bits).pngsave(partial, compression: 6)
+      else
+        quantise(result, bits).tiffsave(partial, compression: :deflate, predictor: :horizontal)
+      end
+    end
+
+    # A float frame in 0..1 as whole numbers at the depth asked for.
+    def quantise(result, bits)
+      top = (1 << bits) - 1
+      scaled = result * top
+      # Deeper than 8 bits has steps too fine to see, so only 8 needs the noise.
+      scaled += Vips::Image.gaussnoise(result.width, result.height, mean: 0.0, sigma: DITHER) if bits == 8
+      scaled = (scaled < 0).ifthenelse(0, (scaled > top).ifthenelse(top, scaled))
+      scaled.cast(bits > 8 ? :ushort : :uchar)
     end
 
     # Per-frame overrides, keyed by filename without extension. Values use the
@@ -367,9 +416,16 @@ module Emulsion
         opts.separator "Output:"
         opts.on("-o", "--out DIR", "Destination directory.") { |v| options[:out] = v }
         opts.on("-f", "--format FORMAT", FORMATS.keys,
-                "Output format: tiff, jpeg or png. Defaults to the input's.") { |v| options[:format] = v }
+                "Output format: tiff, jpeg, png, heic or jp2.",
+                "Defaults to the input's.") { |v| options[:format] = v }
+        opts.on("--bits N", Integer,
+                "Bits per channel where the format allows it: 8 or 16.",
+                "TIFF, PNG and JPEG 2000 take 16 by default, HEIC and JPEG 8.",
+                "Eight bit output is dithered, so a stretched sky keeps its",
+                "gradient instead of banding.") { |v| options[:bits] = v }
         opts.on("--quality N", Integer,
-                "JPEG quality (default #{DEFAULTS[:quality]}). Always 4:4:4.") { |v| options[:quality] = v }
+                "Quality for the lossy formats (default #{DEFAULTS[:quality]}).",
+                "100 asks JPEG 2000 for lossless. Always 4:4:4.") { |v| options[:quality] = v }
         opts.on("--previews", "--jpeg", "Also write 1600px preview JPEGs.") { |v| options[:previews] = v }
         opts.on("--only GLOB", "Filter frames, for example '0000[45]*'.") { |v| options[:only] = v }
         opts.on("--overrides FILE", "YAML of per-frame settings, keyed by filename",

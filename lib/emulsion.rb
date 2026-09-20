@@ -34,6 +34,7 @@ module Emulsion
   DEFAULTS = {
     format: nil,
     quality: 98,
+    bits: nil,
     roll_fit: 1.0,
     reference: nil,
     roll_balance: 1.0,
