@@ -418,6 +418,14 @@ module Emulsion
       RollSample::Pixels.new(r: r, g: g, b: b, y: y, frame_sizes: sample.frame_sizes)
     end
 
+    # The same fit with another set of black floors, for a frame whose own
+    # floors were read off the film rebate.
+    def with_offsets(offsets)
+      copy = self.class.new(offsets, @gains)
+      copy.strength = strength
+      copy
+    end
+
     def to_h
       { "offsets" => @offsets, "gains" => @gains }
     end

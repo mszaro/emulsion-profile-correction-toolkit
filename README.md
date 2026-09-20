@@ -70,6 +70,38 @@ its profile, from as many and as varied rolls as you have:
 bundle exec ruby tools/measure_film.rb lucky-shd-400 ~/scans/roll1 ~/scans/roll2 ~/scans/roll3
 ```
 
+## Beyond the film
+
+Everything above is about the film and the profile it was scanned with. Some
+of what is wrong with a scan is not: the camera's corners are dark, the
+scanner left its borders in the file, the frame holds more at each end than
+the range it was given. Those corrections are off unless `--fix` asks for
+them, so the film profiles stay purely about emulsion.
+
+```bash
+./bin/emulsion --profile lucky-shd-400 --fix ~/scans/"49602 Lucky SHD 400"
+```
+
+A bare `--fix` turns on the usual set, `--fix all` turns on everything, and
+`--fix crop,shadows` names the ones you want.
+
+- `crop` trims the scanner's overscan and the film rebate around the picture.
+- `floor` reads each frame's black floor off that rebate. It is the scanner's
+  own rendering of unexposed film, which beats guessing the floor from the
+  picture, and it follows the lab's balance as it drifts from frame to frame.
+- `flat` measures how much light the corners lose, across the whole roll so
+  the subjects cancel out, and gives it back. Each channel is measured on its
+  own, since corners usually lose colour along with light.
+- `shadows` opens crushed shadows and pulls back held highlights, by as much
+  as each frame has to give, and estimates channels that clipped at white
+  from the ones that survived.
+- `sharpen` and `grain` work from how sharp and how grainy each frame
+  measures against its own grain floor.
+
+Both `crop` and `floor` need the film's own edges in the scan. A lab that
+crops to the picture leaves none, in which case both stand aside and the
+black floor is measured from the frames as before.
+
 ## Film stocks
 
 ### [LomoChrome Color '92](https://shop.lomography.com/eu/lomochrome-color-92-35-mm-iso-400) (`lomochrome-color-92`)

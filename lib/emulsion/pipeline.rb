@@ -10,12 +10,13 @@ module Emulsion
     SECOND_PASS = 0.35
 
     # The roll's fits, any of which may be nil: its colour balance and tone
-    # curve toward the reference, and its gamut fit.
-    def initialize(options, balance: nil, tone: nil, fit: nil, reference: nil)
+    # curve toward the reference, its gamut fit, and the falloff in its corners.
+    def initialize(options, balance: nil, tone: nil, fit: nil, flat: nil, reference: nil)
       @o = options
       @balance = balance
       @tone = tone
       @roll = fit
+      @flat = flat
       @reference = reference
     end
 
@@ -25,7 +26,7 @@ module Emulsion
 
     # The correction on a loaded frame, a float sRGB image in 0..1.
     def render(scan)
-      srgb_in = apply_roll_fit(balance(scan))
+      srgb_in = apply_roll_fit(balance(trim(scan)))
 
       # Colour is measured and corrected in linear light, where a gain is what
       # it claims to be. Tone work happens later, in display space.
@@ -47,15 +48,48 @@ module Emulsion
       srgb = apply_endpoints(srgb, points)
       srgb = @tone.apply(srgb) if @tone
       srgb = s_curve(srgb, @o[:contrast])
-      denoise_chroma(srgb, @o[:chroma], chroma_radius_for(srgb))
+      srgb = recover(srgb)
+      # Measured once, since the grain tells the denoise how hard to work and
+      # the softness tells the sharpening what to do.
+      detail = fix?(:sharpen) || fix?(:grain) ? Detail.measure(srgb) : nil
+      srgb = denoise_chroma(srgb, chroma_for(detail), chroma_radius_for(srgb))
+      fix?(:sharpen) ? Detail.sharpen(srgb, detail, @o[:sharpness]) : srgb
     end
 
     private
 
+    # Everything that has to happen before the frame is measured: the scanner's
+    # borders off, and the corners brought back up. The borders are also where
+    # this frame's own black floor is read, when the scan has them.
+    def trim(scan)
+      return scan unless fix?(:crop) || fix?(:floor) || fix?(:flat)
+
+      edges = FrameEdges.detect(scan)
+      @floor = edges.floor_offsets if fix?(:floor)
+      area = fix?(:crop) && edges.picture
+      scan = scan.extract_area(*area) if area
+      scan = @flat.apply(scan) if @flat && fix?(:flat)
+      scan
+    end
+
+    def fix?(name)
+      @o[:fix]&.include?(name)
+    end
+
+    # What the scan bunched at the ends of the range, opened by as much as
+    # this frame has to give back. Before the denoise, since lifting a shadow
+    # brings its grain up with it.
+    def recover(srgb)
+      return srgb unless fix?(:shadows)
+
+      Dynamics.apply(srgb, Dynamics.measure(srgb), @o[:recovery])
+    end
+
     # The roll's colour balance, then this frame's own, which takes out how far
     # the lab's balance drifted on this frame in particular.
     def balance(scan)
-      scan = @balance.apply(scan) if @balance
+      scan = @balance.with_offsets(@floor).apply(scan) if @balance && @floor
+      scan = @balance.apply(scan) if @balance && !@floor
       return scan unless @reference && @o[:frame_balance].positive?
 
       frame = ColourBalance.fit_frame(scan, @reference.neutral, limit: @o[:frame_balance_limit])
@@ -170,6 +204,19 @@ module Emulsion
       d = diff * (1.0 - amount) + fine * amount
       d = d * (1.0 - amount * 0.55) + coarse * (amount * 0.55)
       Colour.clamp01(d + y)
+    end
+
+    # The grain a well-scanned frame carries, which the profile's chroma
+    # setting is written against.
+    USUAL_GRAIN = 0.008
+
+    # How hard to clean the colour speckle. The profile says what this film
+    # usually needs, and the grain measured on this frame moves it, so the
+    # grainy frames of a roll are cleaned harder than the smooth ones.
+    def chroma_for(detail)
+      return @o[:chroma] unless detail && fix?(:grain)
+
+      (@o[:chroma] * detail.grain / USUAL_GRAIN).clamp(0.0, 0.95)
     end
 
     # Grain covers fewer pixels in a smaller scan, so the radius scales with

@@ -12,6 +12,18 @@ module Emulsion
       new.run(argv)
     end
 
+    # What --fix was asked for: the usual set, everything, or a named list.
+    def self.fixes_from(names)
+      return DEFAULT_FIXES if names.nil? || names.empty?
+      return FIXES if names.map(&:to_s).include?("all")
+
+      chosen = names.map { |name| name.to_s.strip.downcase.to_sym }
+      unknown = chosen - FIXES
+      raise ArgumentError, "no such fix: #{unknown.join(', ')}. Try #{FIXES.join(', ')} or all" if unknown.any?
+
+      chosen
+    end
+
     def run(argv)
       flags = { previews: false }
       parser = build_parser(flags)
@@ -106,7 +118,8 @@ module Emulsion
       want = {
         balance: reference && options[:roll_balance].positive?,
         tone: reference&.tone_shape && options[:roll_tone].positive?,
-        fit: options[:roll_fit].positive?
+        fit: options[:roll_fit].positive?,
+        flat: options[:fix].include?(:flat)
       }
       return {} unless want.values.any?
 
@@ -116,14 +129,20 @@ module Emulsion
                                    film_gains: want[:balance] && options[:film_gains],
                                    roll_balance_limit: want[:balance] && options[:roll_balance_limit],
                                    tone_shape: want[:tone] && reference.tone_shape,
-                                   roll_balance: want[:balance] && options[:roll_balance])
+                                   roll_balance: want[:balance] && options[:roll_balance],
+                                   fix: options[:fix].sort)
       cached = AnalysisCache.load(destination, key) || {}
       fits = {}
       fits[:balance] = ColourBalance.from_cache(cached[:balance]) if want[:balance] && cached[:balance]
       fits[:tone] = ToneCurve.from_cache(cached[:tone]) if want[:tone] && cached[:tone]
       fits[:fit] = GamutFit.from_cache(cached[:fit]) if want[:fit] && cached[:fit]
+      fits[:flat] = FlatField.from_cache(cached[:flat]) if want[:flat] && cached[:flat]
 
       if want.any? { |name, wanted| wanted && !fits[name] }
+        if want[:flat] && !fits[:flat]
+          puts "measuring the falloff in the corners..."
+          fits[:flat] = FlatField.fit(all) { |_path, image| FrameEdges.detect(image).picture }
+        end
         puts "sampling roll of #{all.size} frames..."
         sample = RollSample.collect(all)
         if want[:balance] && !fits[:balance]
@@ -146,7 +165,7 @@ module Emulsion
         puts "reusing the roll analysis"
       end
 
-      { balance: :roll_balance, tone: :roll_tone, fit: :roll_fit }.each do |name, setting|
+      { balance: :roll_balance, tone: :roll_tone, fit: :roll_fit, flat: :flat_field }.each do |name, setting|
         next unless fits[name]
 
         fits[name].strength = options[setting]
@@ -326,6 +345,23 @@ module Emulsion
                 "Colour noise reduction, 0 to 1. Luma grain is left alone.") { |v| options[:chroma] = v }
         opts.on("-R", "--chroma-radius INT", Integer,
                 "Colour blur radius in pixels. Scales with image width by default.") { |v| options[:chroma_radius] = v }
+
+        opts.separator ""
+        opts.separator "Beyond the film:"
+        opts.on("--fix [LIST]", Array,
+                "Corrections that are about the camera, the scanner or the",
+                "frame rather than the film, off unless asked for. Bare --fix",
+                "turns on the usual set, --fix all turns on everything, or",
+                "name them: #{FIXES.join(', ')}.") { |v| options[:fix] = CLI.fixes_from(v) }
+        opts.on("--flat-field FLOAT", Float,
+                "Strength of the lift in the corners, 0 to 1",
+                "(default #{DEFAULTS[:flat_field]}).") { |v| options[:flat_field] = v }
+        opts.on("--recovery FLOAT", Float,
+                "Strength of the shadow and highlight recovery, 0 to 1",
+                "(default #{DEFAULTS[:recovery]}).") { |v| options[:recovery] = v }
+        opts.on("--sharpness FLOAT", Float,
+                "Strength of the sharpening, 0 to 1 (default #{DEFAULTS[:sharpness]}).",
+                "Frames measured as soft are sharpened; the rest are left.") { |v| options[:sharpness] = v }
 
         opts.separator ""
         opts.separator "Output:"
