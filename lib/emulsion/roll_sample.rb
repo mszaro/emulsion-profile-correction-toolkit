@@ -10,7 +10,9 @@ module Emulsion
     # Channels and luma in 0..255, and how many pixels came from each frame.
     Pixels = Data.define(:r, :g, :b, :y, :frame_sizes)
 
-    def self.collect(paths, per_frame: 6000, verbose: true)
+    # A crop block takes a frame and returns where its picture sits, so that
+    # scanner borders stay out of the roll's statistics.
+    def self.collect(paths, per_frame: 6000, verbose: true, &crop)
       r = []
       g = []
       b = []
@@ -24,6 +26,8 @@ module Emulsion
         image = image[0..2] if image.bands > 3
         image = image.cast(:float)
         image /= 257.0 if image.max > 256
+        area = crop&.call(image / 255.0)
+        image = image.extract_area(*area) if area
 
         w = image.width
         h = image.height

@@ -144,7 +144,13 @@ module Emulsion
           fits[:flat] = FlatField.fit(all) { |_path, image| FrameEdges.detect(image).picture }
         end
         puts "sampling roll of #{all.size} frames..."
-        sample = RollSample.collect(all)
+        # Sampled inside the picture when the borders are coming off anyway,
+        # since overscan and rebate are not part of any scene.
+        sample = if options[:fix].include?(:crop)
+                   RollSample.collect(all) { |image| FrameEdges.detect(image).picture }
+                 else
+                   RollSample.collect(all)
+                 end
         if want[:balance] && !fits[:balance]
           puts "balancing the roll toward #{reference.name}..."
           fits[:balance] = ColourBalance.fit_roll(sample, reference.neutral, film: options[:film_gains],
@@ -182,7 +188,12 @@ module Emulsion
     TUNE_ROUNDS = 2
     TUNE_LIMIT = 0.6
     TUNE_DAMPING = 0.6
-    TUNE_WIDTH = 640
+
+    # Wide enough that the film border is still found here. At 640 a rebate is
+    # a few pixels across and goes unseen, so the tuning would measure frames
+    # that still had the scanner's white overscan in them and pull the whole
+    # roll's balance toward correcting for it.
+    TUNE_WIDTH = 1500
 
     # The endpoint stretch and the tone work multiply whatever tint is left in
     # a frame, so a balance that lands on the reference before them lands warm
@@ -408,6 +419,14 @@ module Emulsion
         opts.on("--recovery FLOAT", Float,
                 "Strength of the shadow and highlight recovery, 0 to 1",
                 "(default #{DEFAULTS[:recovery]}).") { |v| options[:recovery] = v }
+        opts.on("--lost-colour FLOAT", Float,
+                "Ease toward grey where a channel has nothing left to say,",
+                "0 to 1 (default #{DEFAULTS[:lost_colour]}). For films whose blue dies",
+                "on warm subjects, where how warm they were cannot be known.") { |v| options[:lost_colour] = v }
+        opts.on("--chroma-shape FLOAT", Float,
+                "Bend the film's colour onto the reference's shape, 0 to 1",
+                "(default #{DEFAULTS[:chroma_shape]}). Needs chroma_map in the profile,",
+                "written by tools/measure_shape.rb.") { |v| options[:chroma_shape] = v }
         opts.on("--sharpness FLOAT", Float,
                 "Strength of the sharpening, 0 to 1 (default #{DEFAULTS[:sharpness]}).",
                 "Frames measured as soft are sharpened; the rest are left.") { |v| options[:sharpness] = v }
