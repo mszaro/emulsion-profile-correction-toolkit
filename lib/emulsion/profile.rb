@@ -12,7 +12,7 @@ module Emulsion
     OPTIONAL = %i[name saturation chroma_radius roll_fit reference roll_balance
                   roll_balance_limit film_gains frame_balance frame_balance_limit
                   roll_tone lost_colour chroma_map chroma_shape
-                  highlight_headroom].freeze
+                  highlight_headroom sky_neutral].freeze
 
     attr_reader :id, :name, :settings, :healthy_spread
 

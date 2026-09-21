@@ -133,6 +133,7 @@ module Emulsion
                                    # The tuning pass renders frames through the whole pipeline,
                                    # so the headroom it had changes the balance it settles on.
                                    highlight_headroom: options[:highlight_headroom],
+                                   sky_neutral: options[:sky_neutral],
                                    fix: options[:fix].sort)
       cached = AnalysisCache.load(destination, key) || {}
       fits = {}
@@ -213,7 +214,12 @@ module Emulsion
       end
       TUNE_ROUNDS.times do
         rendered = frames.map { |image| Pipeline.new(options, reference: reference, **fits).render(image) }
-        pixels = rendered.flat_map { |image| ColourBalance.frame_pixels(image) }
+        # The sky is kept out here too. The tuning reads the greys of finished
+        # frames, and a sky would vote in this estimate exactly as it does in
+        # the frame's own.
+        pixels = rendered.flat_map do |image|
+          ColourBalance.frame_pixels(image, skip: options[:sky_neutral] ? Sky.mask(image) : nil)
+        end
         drift = ColourBalance.residual_gains(pixels, reference.neutral, TUNE_LIMIT,
                                              ColourBalance::FRAME_MIN_PIXELS)
         break unless drift
@@ -422,6 +428,10 @@ module Emulsion
         opts.on("--recovery FLOAT", Float,
                 "Strength of the shadow and highlight recovery, 0 to 1",
                 "(default #{DEFAULTS[:recovery]}).") { |v| options[:recovery] = v }
+        opts.on("--[no-]sky-neutral",
+                "Keep a detected sky out of the frame's neutral estimate",
+                "(default #{DEFAULTS[:sky_neutral]}). A pale sky is large, smooth and",
+                "near neutral, so the fit adopts it as the grey card.") { |v| options[:sky_neutral] = v }
         opts.on("--highlight-headroom STOPS", Float,
                 "How far a pixel may be darkened when a gain would take it",
                 "past white (default #{DEFAULTS[:highlight_headroom]}). Zero clips it instead,",

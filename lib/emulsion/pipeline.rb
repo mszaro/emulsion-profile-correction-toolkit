@@ -92,11 +92,22 @@ module Emulsion
       scan = with_headroom(roll).apply(scan) if roll
       return scan unless @reference && @o[:frame_balance].positive?
 
-      frame = ColourBalance.fit_frame(scan, @reference.neutral, limit: @o[:frame_balance_limit])
+      frame = ColourBalance.fit_frame(scan, @reference.neutral, limit: @o[:frame_balance_limit],
+                                                                skip: sky_in(scan))
       return scan unless frame
 
       frame.strength = @o[:frame_balance]
       shape(with_headroom(frame).apply(scan))
+    end
+
+    # A sky is a large smooth surface sitting near neutral, which is exactly
+    # what the drift fit goes looking for, so it takes the fit over and the
+    # rest of the frame is balanced to suit it. Kept out of the estimate when
+    # the profile asks and the detector is willing to name one.
+    def sky_in(scan)
+      return nil unless @o[:sky_neutral]
+
+      Sky.mask(scan)
     end
 
     # A gain that would take a pixel past white darkens it instead, by up to

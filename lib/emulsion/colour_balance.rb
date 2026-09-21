@@ -99,8 +99,8 @@ module Emulsion
 
     # Fits one frame, already roll balanced, as a float sRGB image, for how the
     # lab's balance drifted on this frame. Nil when too little is measured.
-    def self.fit_frame(srgb, target, limit: FRAME_MAX_STOPS)
-      gains = drift_gains(frame_pixels(srgb), target, limit, FRAME_MIN_PIXELS)
+    def self.fit_frame(srgb, target, limit: FRAME_MAX_STOPS, skip: nil)
+      gains = drift_gains(frame_pixels(srgb, skip: skip), target, limit, FRAME_MIN_PIXELS)
       gains && new([0.0, 0.0, 0.0], gains)
     end
 
@@ -199,17 +199,26 @@ module Emulsion
 
     # Every Nth pixel of a frame, in linear light, taken the way RollSample
     # takes them and inside the same inset.
-    def self.frame_pixels(srgb)
+    # `skip` is a mask of pixels that have no business in a neutral estimate,
+    # a sky being the one that matters, taken at the same grid as the pixels.
+    def self.frame_pixels(srgb, skip: nil)
       w = srgb.width
       h = srgb.height
       dx = (w * RollSample::INSET).to_i
       dy = (h * RollSample::INSET).to_i
       inner = srgb.extract_area(dx, dy, w - 2 * dx, h - 2 * dy)
       factor = Math.sqrt(inner.width * inner.height / FRAME_PIXELS.to_f).floor
+      factor = factor > 1 ? factor : 1
       inner = inner.subsample(factor, factor) if factor > 1
-      inner.cast(:float).write_to_memory.unpack("f*").each_slice(inner.bands).map do |px|
+      pixels = inner.cast(:float).write_to_memory.unpack("f*").each_slice(inner.bands).map do |px|
         px.first(3).map { |v| Colour.srgb_to_linear_scalar(v.clamp(0.0, 1.0)) }
       end
+      return pixels unless skip
+
+      keep = skip.extract_area(dx, dy, w - 2 * dx, h - 2 * dy)
+      keep = keep.subsample(factor, factor) if factor > 1
+      flags = keep.cast(:float).write_to_memory.unpack("f*")
+      pixels.each_with_index.reject { |_px, i| flags[i] > 0.5 }.map(&:first)
     end
 
     def self.remove_floor(value, offset)
