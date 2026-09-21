@@ -36,4 +36,18 @@ class PipelineVetoesTest < Minitest::Test
   def test_the_profile_headroom_wins_when_it_is_larger
     assert_equal 2.0, pipeline(highlight_headroom: 2.0, sky_headroom: 1.5).send(:headroom_for, sky_frame)
   end
+  # A dark interior with one lit window: too little of it for the frame fit to
+  # read, and so no ground for inferring lost colour either. The window keeps
+  # its amber.
+  def test_a_frame_the_fit_cannot_read_keeps_its_colour
+    frame = TestImages.linear_image(200, 150) do |x, y|
+      x.between?(80, 120) && y.between?(50, 90) ? [0.6, 0.42, 0.03] : [0.002, 0.002, 0.002]
+    end
+    reference = Emulsion::Reference.load("fujifilm-superia")
+    assert_nil Emulsion::ColourBalance.fit_frame(frame, reference.neutral)
+    options = Emulsion::DEFAULTS.merge(reference: "fujifilm-superia", frame_balance: 1.0,
+                                       frame_balance_limit: 2.5, lost_colour: 1.0)
+    shaped = Emulsion::Pipeline.new(options, reference: reference).send(:balance, frame)
+    assert_operator (shaped - frame).abs.max, :<, 1e-6
+  end
 end
