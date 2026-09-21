@@ -11,7 +11,8 @@ module Emulsion
                   max_vibrance knee max_stretch contrast chroma healthy_spread].freeze
     OPTIONAL = %i[name saturation chroma_radius roll_fit reference roll_balance
                   roll_balance_limit film_gains frame_balance frame_balance_limit
-                  roll_tone lost_colour chroma_map chroma_shape].freeze
+                  roll_tone lost_colour chroma_map chroma_shape
+                  highlight_headroom].freeze
 
     attr_reader :id, :name, :settings, :healthy_spread
 

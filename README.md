@@ -134,6 +134,22 @@ same measurement, so the two divide the frame between them: the map reshapes
 the colour that survived, and the easing takes the shout out of the colour
 that did not.
 
+
+### When a gain has nowhere to go
+
+A correction can also fail at the other end. Lucky's sky arrives with its blue
+below its green, and the balance rightly asks for about two stops of blue
+there, but the sky is already near the top of the range: blue stops at white
+while green carries on up with the tone work, and the sky lands pale cyan.
+Nothing downstream can undo it, because clipped pixels no longer differ from
+each other.
+
+`--highlight-headroom` gives the gain somewhere to go. A pixel that would be
+pushed past white is darkened instead, by up to the stops it is given, which
+keeps the colour the gains asked for and spends brightness on it. Only pixels
+that would clip move at all. On the Lucky rolls it takes a sky from 1.11 on
+blue against green to 1.50, where Superia's skies sit between 1.15 and 1.73.
+
 ## Beyond the film
 
 Everything above is about the film and the profile it was scanned with. Some

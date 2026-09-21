@@ -352,6 +352,15 @@ module Emulsion
       @luts = nil
     end
 
+    # How far a pixel may be pulled down, in stops, when a gain would take it
+    # past white. Zero clips instead, which is what happens to a sky whose
+    # blue has to come up two stops.
+    def headroom
+      @headroom || 0.0
+    end
+
+    attr_writer :headroom
+
     def applied_offsets
       @offsets.map { |o| o * strength }
     end
@@ -392,7 +401,8 @@ module Emulsion
       guide = ((linear * LUMA).bandmean * 3.0).gaussblur(2.0)
       index = (Colour.to_srgb(guide) * 255.0).cast(:uchar)
       bands = (0..2).map { |c| linear[c] * index.maplut(luts[c]) }
-      Colour.to_srgb(bands[0].bandjoin([bands[1], bands[2]])).copy(interpretation: :srgb)
+      corrected = Highlights.pull(bands[0].bandjoin([bands[1], bands[2]]), headroom)
+      Colour.to_srgb(corrected).copy(interpretation: :srgb)
     end
 
     # The same correction on a roll sample, so later roll fits see the

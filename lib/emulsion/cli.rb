@@ -130,6 +130,9 @@ module Emulsion
                                    roll_balance_limit: want[:balance] && options[:roll_balance_limit],
                                    tone_shape: want[:tone] && reference.tone_shape,
                                    roll_balance: want[:balance] && options[:roll_balance],
+                                   # The tuning pass renders frames through the whole pipeline,
+                                   # so the headroom it had changes the balance it settles on.
+                                   highlight_headroom: options[:highlight_headroom],
                                    fix: options[:fix].sort)
       cached = AnalysisCache.load(destination, key) || {}
       fits = {}
@@ -419,6 +422,10 @@ module Emulsion
         opts.on("--recovery FLOAT", Float,
                 "Strength of the shadow and highlight recovery, 0 to 1",
                 "(default #{DEFAULTS[:recovery]}).") { |v| options[:recovery] = v }
+        opts.on("--highlight-headroom STOPS", Float,
+                "How far a pixel may be darkened when a gain would take it",
+                "past white (default #{DEFAULTS[:highlight_headroom]}). Zero clips it instead,",
+                "which flattens skies on films whose blue has to come up.") { |v| options[:highlight_headroom] = v }
         opts.on("--lost-colour FLOAT", Float,
                 "Ease toward grey where a channel has nothing left to say,",
                 "0 to 1 (default #{DEFAULTS[:lost_colour]}). For films whose blue dies",

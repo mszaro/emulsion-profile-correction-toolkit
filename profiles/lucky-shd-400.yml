@@ -44,6 +44,12 @@ chroma_map:
 chroma_shape: 1.0
 lost_colour: 0.5
 
+# A gain of two stops on a sky that is already bright has nowhere to go, and
+# blue stops at white while green carries on up, which leaves the sky pale
+# cyan. This lets such a pixel darken by up to a stop and a half instead, so
+# the colour the gains asked for survives.
+highlight_headroom: 1.5
+
 # Then each frame on its own, since the lab balanced every frame differently,
 # some by two stops or more.
 frame_balance: 1.0

@@ -88,15 +88,22 @@ module Emulsion
     # The roll's colour balance, then this frame's own, which takes out how far
     # the lab's balance drifted on this frame in particular.
     def balance(scan)
-      scan = @balance.with_offsets(@floor).apply(scan) if @balance && @floor
-      scan = @balance.apply(scan) if @balance && !@floor
+      roll = @balance && (@floor ? @balance.with_offsets(@floor) : @balance)
+      scan = with_headroom(roll).apply(scan) if roll
       return scan unless @reference && @o[:frame_balance].positive?
 
       frame = ColourBalance.fit_frame(scan, @reference.neutral, limit: @o[:frame_balance_limit])
       return scan unless frame
 
       frame.strength = @o[:frame_balance]
-      shape(frame.apply(scan))
+      shape(with_headroom(frame).apply(scan))
+    end
+
+    # A gain that would take a pixel past white darkens it instead, by up to
+    # the profile's headroom, so the colour the gain asked for survives.
+    def with_headroom(fit)
+      fit.headroom = @o[:highlight_headroom].to_f
+      fit
     end
 
     # Two ways past what per-channel gains can reach, both off unless a
