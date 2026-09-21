@@ -8,14 +8,12 @@ class ProfilesTest < Minitest::Test
     end
   end
 
-  def test_new_films_balance_toward_superia
-    %w[harman-phoenix-200 lucky-shd-400].each do |name|
-      assert_equal "fujifilm-superia", Emulsion::Profile.load(name).settings[:reference]
+  def test_every_film_balances_toward_superia
+    %w[harman-phoenix-200 lucky-shd-400 lomochrome-color-92].each do |name|
+      settings = Emulsion::Profile.load(name).settings
+      assert_equal "fujifilm-superia", settings[:reference], name
+      assert_equal Emulsion::ColourBalance::TONES.size, settings[:film_gains]&.size, "#{name} film gains"
     end
-  end
-
-  def test_lomochrome_has_no_reference
-    assert_nil Emulsion::Profile.load("lomochrome-color-92").settings[:reference]
   end
 
   def test_superia_reference_has_a_neutral_and_a_shape

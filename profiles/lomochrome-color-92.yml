@@ -1,16 +1,50 @@
 # LomoChrome Color '92, scanned by a lab as if it were a Kodak or Fuji stock.
 name: LomoChrome Color '92
 
+# Two rolls of it came back with casts pointing in opposite directions, so no
+# one hand typed balance serves both. Each roll is balanced toward how Superia
+# renders neutral, tone by tone: by the film's own cast below, then by up to a
+# stop more for how its lab session drifted.
+reference: fujifilm-superia
+roll_balance: 1.0
+roll_balance_limit: 1.0
+
+# The film's own cast, per tone, as [red, green, blue] stops, measured by
+# tools/measure_film.rb against FujiFilm Superia 200 and 400 from 2 rolls:
+#   49601 Lomography Color 92
+#   47791 Lomography Color 92
+film_gains:
+  - [-0.015, 0.010, -0.025]
+  - [0.083, -0.010, -0.136]
+  - [0.044, 0.033, -0.407]
+  - [-0.021, 0.035, -0.287]
+  - [0.175, -0.010, -0.431]
+  - [0.361, -0.014, -0.837]
+  - [0.015, 0.017, -0.184]
+  - [0.031, -0.014, 0.042]
+
+# Then each frame on its own, as far as the drift measured on the roll calls
+# for. These two labs drifted a quarter of a stop at most, so it is held to a
+# stop.
+frame_balance: 1.0
+frame_balance_limit: 1.0
+
+# Its tonal look is the point of the film, so the tones stay where it put them.
+roll_tone: 0.0
+
+# The per tone balance does what the gamut fit was for, and the film already
+# spreads its colour wider than Superia does.
+roll_fit: 0.0
+
 # The scans come back bleached, so each frame is boosted toward this mean
 # saturation. The boost is strongest on greyish colours and halves at the knee.
 target_saturation: 0.42
 max_vibrance: 3.0
 knee: 0.22
 
-# The whites already come back neutral, so grey-world balancing stays off.
-# The shadows come back yellow, which is what the second balance point is for.
+# The frame balance above does this job, so the older balance is off.
 neutral: 0.0
-wb: 1.0
+wb: 0.0
 wb_clamp: 1.55
 shadow_wb: 0.8
 
@@ -23,7 +57,3 @@ contrast: 0.15
 # Red and blue grain are several times noisier than green, so the colour
 # speckle reads magenta. Clean it hard; the luma grain is left alone.
 chroma: 0.9
-
-# How widely a well-scanned roll of this film spreads its colours. The roll
-# fit reopens a collapsed roll up to about here and no further.
-healthy_spread: 0.70
