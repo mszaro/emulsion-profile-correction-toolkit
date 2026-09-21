@@ -19,6 +19,7 @@ require_relative "emulsion/dynamics"
 require_relative "emulsion/detail"
 require_relative "emulsion/highlights"
 require_relative "emulsion/sky"
+require_relative "emulsion/diagnosis"
 require_relative "emulsion/lost_colour"
 require_relative "emulsion/chroma_map"
 require_relative "emulsion/reference"
@@ -54,6 +55,8 @@ module Emulsion
     highlight_headroom: 0.0,
     sky_neutral: false,
     sky_floor: 0.0,
+    sky_headroom: 0.0,
+    measured_frame_balance: true,
     lost_colour: 0.0,
     chroma_map: nil,
     chroma_shape: 0.0,

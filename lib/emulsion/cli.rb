@@ -74,6 +74,8 @@ module Emulsion
         return 1
       end
 
+      return explain(source, reference, options) if options[:explain] || options[:audit]
+
       FileUtils.mkdir_p(destination)
       preview_dir = File.join(destination, "preview")
       FileUtils.mkdir_p(preview_dir) if options[:previews]
@@ -81,6 +83,7 @@ module Emulsion
       overrides = load_overrides(options[:overrides])
       puts "profile: #{profile.name}"
 
+      options = measure_frame_balance(source, reference, options)
       fits = analyse_roll(source, destination, profile, reference, options)
 
       puts "processing #{files.size} frames -> #{destination}"
@@ -118,13 +121,15 @@ module Emulsion
       want = {
         balance: reference && options[:roll_balance].positive?,
         tone: reference&.tone_shape && options[:roll_tone].positive?,
-        fit: options[:roll_fit].positive?,
+        # The gamut fit reopens a film toward what healthy looks like, which the
+        # reference measured; a profile may still say so itself.
+        fit: options[:roll_fit].positive? && !healthy_spread(profile, reference).nil?,
         flat: options[:fix].include?(:flat) && options[:flat_field].positive?
       }
       return {} unless want.values.any?
 
       all = find_files(source, nil)
-      key = AnalysisCache.key(all, healthy_spread: profile.healthy_spread,
+      key = AnalysisCache.key(all, healthy_spread: healthy_spread(profile, reference),
                                    neutral: want[:balance] && reference.neutral,
                                    film_gains: want[:balance] && options[:film_gains],
                                    roll_balance_limit: want[:balance] && options[:roll_balance_limit],
@@ -133,6 +138,8 @@ module Emulsion
                                    # The tuning pass renders frames through the whole pipeline,
                                    # so the headroom it had changes the balance it settles on.
                                    highlight_headroom: options[:highlight_headroom],
+                                   sky_headroom: options[:sky_headroom],
+                                   frame_balance: options[:frame_balance],
                                    sky_neutral: options[:sky_neutral],
                                    sky_floor: options[:sky_floor],
                                    fix: options[:fix].sort)
@@ -169,7 +176,7 @@ module Emulsion
         fits[:tone] ||= ToneCurve.fit(sample, reference.tone_shape) if want[:tone]
         if want[:fit] && !fits[:fit]
           puts "fitting colour to reopen the roll's gamut..."
-          fits[:fit] = GamutFit.new(sample, healthy_spread: profile.healthy_spread)
+          fits[:fit] = GamutFit.new(sample, healthy_spread: healthy_spread(profile, reference))
         end
         tune_balance(all, options, fits, reference) if fits[:balance]
         AnalysisCache.save(destination, key, **fits)
@@ -184,6 +191,38 @@ module Emulsion
         puts fits[name].report
       end
       fits
+    end
+
+    # The profile's frame balance is a ceiling, and how much of it a roll gets
+    # follows how far its lab actually moved from frame to frame. A roll that
+    # reads no steadier than Superia gets none, since balancing it would only
+    # be balancing its scenes.
+    def measure_frame_balance(source, reference, options)
+      return options unless reference && options[:frame_balance].positive? && options[:measured_frame_balance]
+
+      paths = find_files(source, nil)
+      step = [paths.size / Diagnosis::FRAMES, 1].max
+      frames = Diagnosis.frames_of(paths.each_slice(step).map(&:first).first(Diagnosis::FRAMES))
+      drift, = Diagnosis.lab_drift(frames, reference)
+      return options unless drift
+
+      share = Diagnosis.ramp(drift, *Diagnosis::LINES[:lab_drift].first(2))
+      puts format("  frame to frame drift %.2f stops, so frame balance at %.0f%%", drift, share * 100)
+      options.merge(frame_balance: options[:frame_balance] * share)
+    end
+
+    # The diagnosis on its own, with no frame written.
+    def explain(source, reference, options)
+      all = find_files(source, nil)
+      flat = FlatField.fit(all, verbose: false) { |_path, image| FrameEdges.detect(image).picture }
+      diagnosis = Diagnosis.of(all, reference: reference, flat: flat)
+      puts diagnosis.report
+      puts diagnosis.audit(options) if options[:audit]
+      0
+    end
+
+    def healthy_spread(profile, reference)
+      profile.healthy_spread || reference&.healthy_spread
     end
 
     # Frames checked through the whole pipeline when tuning the balance, how
@@ -430,6 +469,9 @@ module Emulsion
         opts.on("--recovery FLOAT", Float,
                 "Strength of the shadow and highlight recovery, 0 to 1",
                 "(default #{DEFAULTS[:recovery]}).") { |v| options[:recovery] = v }
+        opts.on("--sky-headroom STOPS", Float,
+                "Highlight headroom for frames with a sky in them, when that",
+                "is more than the rest get (default #{DEFAULTS[:sky_headroom]}).") { |v| options[:sky_headroom] = v }
         opts.on("--sky-floor STOPS", Float,
                 "How far a sky that came out warm may be brought back toward",
                 "neutral (default #{DEFAULTS[:sky_floor]}). Never pushed past it, and",
@@ -471,6 +513,12 @@ module Emulsion
                 "the only step up: its encoder gives the same file at 95 and",
                 "at 100. Always 4:4:4.") { |v| options[:quality] = v }
         opts.on("--previews", "--jpeg", "Also write 1600px preview JPEGs.") { |v| options[:previews] = v }
+        opts.on("--[no-]measured-frame-balance",
+                "Scale the frame balance by how far the lab drifted frame to",
+                "frame on this roll (default #{DEFAULTS[:measured_frame_balance]}).") { |v| options[:measured_frame_balance] = v }
+        opts.on("--explain", "Say what the roll shows is wrong with it, and stop.") { |v| options[:explain] = v }
+        opts.on("--audit", "Say what the roll shows and what the profile does",
+                "about each thing, and stop.") { |v| options[:audit] = v }
         opts.on("--only GLOB", "Filter frames, for example '0000[45]*'.") { |v| options[:only] = v }
         opts.on("--overrides FILE", "YAML of per-frame settings, keyed by filename",
                 "without extension.") { |v| options[:overrides] = v }

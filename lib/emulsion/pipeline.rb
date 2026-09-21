@@ -47,7 +47,7 @@ module Emulsion
                                                 max_stretch: @o[:max_stretch])
       srgb = apply_endpoints(srgb, points)
       srgb = @tone.apply(srgb) if @tone
-      srgb = s_curve(srgb, @o[:contrast])
+      srgb = s_curve(srgb, contrast_for(points))
       # Late, on the finished tones, since a sky that is level here is level in
       # the picture: the stretch and the curve both move colour on the way.
       srgb = level_sky(srgb)
@@ -85,22 +85,44 @@ module Emulsion
     def recover(srgb)
       return srgb unless fix?(:shadows)
 
-      Dynamics.apply(srgb, Dynamics.measure(srgb), @o[:recovery])
+      measured = Dynamics.measure(srgb)
+      held = 1.0 - Diagnosis.crushed(srgb) * (1.0 - CRUSHED_SHADOW_KEEP)
+      measured = measured.dup.tap { |m| m.shadow_room *= held } if held < 1.0
+      Dynamics.apply(srgb, measured, @o[:recovery])
+    end
+
+    # How much of the shadow lift a frame with a crushed channel keeps. The
+    # lift brightens what the other two channels hold and cannot bring the
+    # crushed one back, so on Phoenix it only makes the shadows more teal.
+    CRUSHED_SHADOW_KEEP = 0.35
+
+    # A frame that needed the whole stretch it was allowed is flat by nature,
+    # fog or an overcast sky, and contrast on top of the stretch mostly
+    # multiplies grain. It keeps this much of the profile's contrast.
+    STRETCHED_CONTRAST_KEEP = 0.5
+
+    def contrast_for(points)
+      spans = points.map { |lo, hi| hi - lo }
+      stretch = 1.0 / [spans.sum / spans.size, 1e-6].max
+      capped = @o[:max_stretch] && stretch >= @o[:max_stretch] * 0.95
+      capped ? @o[:contrast] * STRETCHED_CONTRAST_KEEP : @o[:contrast]
     end
 
     # The roll's colour balance, then this frame's own, which takes out how far
     # the lab's balance drifted on this frame in particular.
     def balance(scan)
       roll = @balance && (@floor ? @balance.with_offsets(@floor) : @balance)
-      scan = with_headroom(roll).apply(scan) if roll
-      return scan unless @reference && @o[:frame_balance].positive?
+      scan = with_headroom(roll, scan).apply(scan) if roll
+      # The colour shaping runs whether or not the frame is balanced, since a
+      # roll the lab kept steady still has the film's own colour to reshape.
+      return shape(scan) unless @reference && @o[:frame_balance].positive?
 
       frame = ColourBalance.fit_frame(scan, @reference.neutral, limit: @o[:frame_balance_limit],
                                                                 skip: sky_in(scan))
-      return scan unless frame
+      return shape(scan) unless frame
 
       frame.strength = @o[:frame_balance]
-      shape(with_headroom(frame).apply(scan))
+      shape(with_headroom(frame, scan).apply(scan))
     end
 
     # A sky may be any blue it likes and may be grey, and may not come out
@@ -124,9 +146,21 @@ module Emulsion
 
     # A gain that would take a pixel past white darkens it instead, by up to
     # the profile's headroom, so the colour the gain asked for survives.
-    def with_headroom(fit)
-      fit.headroom = @o[:highlight_headroom].to_f
+    def with_headroom(fit, scan)
+      fit.headroom = headroom_for(scan)
       fit
+    end
+
+    # A frame with a sky in it gets the sky's headroom when that is the larger,
+    # since the sky is where a channel runs into white and takes the sky's
+    # colour with it. Found once per frame, on the scan as it arrives.
+    def headroom_for(scan)
+      room = @o[:highlight_headroom].to_f
+      sky_room = @o[:sky_headroom].to_f
+      return room unless sky_room > room
+
+      @sky_found = !Sky.mask(scan).nil? if @sky_found.nil? && scan
+      @sky_found ? sky_room : room
     end
 
     # Two ways past what per-channel gains can reach, both off unless a
@@ -233,7 +267,7 @@ module Emulsion
       lo = points.map(&:first)
       span = points.map { |p| [p[1] - p[0], 1e-6].max }
       stretched = (image - lo) / span
-      room = @o[:highlight_headroom].to_f
+      room = headroom_for(nil)
       return Colour.clamp01(stretched) unless room.positive?
 
       Colour.to_srgb(Highlights.pull(Colour.to_linear(stretched), room)).copy(interpretation: :srgb)
