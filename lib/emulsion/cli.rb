@@ -119,7 +119,7 @@ module Emulsion
         balance: reference && options[:roll_balance].positive?,
         tone: reference&.tone_shape && options[:roll_tone].positive?,
         fit: options[:roll_fit].positive?,
-        flat: options[:fix].include?(:flat)
+        flat: options[:fix].include?(:flat) && options[:flat_field].positive?
       }
       return {} unless want.values.any?
 

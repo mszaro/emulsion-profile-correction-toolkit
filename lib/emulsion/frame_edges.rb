@@ -136,9 +136,21 @@ module Emulsion
 
     # A side is only trusted to crop as far as MAX_CROP, so a dark edge read
     # as film can never eat into the picture.
+    #
+    # Once the film is known to be in the scan, a side that found nothing
+    # borrows from the side opposite, since the gate is the same width top and
+    # bottom and left and right. A rebate fogged by a light leak reads too
+    # bright to be film, and without this it stays in the picture as a
+    # coloured strip.
     def crop_at(side, size)
-      edge = @sides[side] && @sides[side][:edge]
+      edge = edge_of(side) || edge_of(OPPOSITE[side])
       edge && edge <= size * MAX_CROP ? edge : 0
+    end
+
+    OPPOSITE = { left: :right, right: :left, top: :bottom, bottom: :top }.freeze
+
+    def edge_of(side)
+      @sides[side] && @sides[side][:edge]
     end
 
     # The frame's own black floor in 0..255, median of the sides that found a

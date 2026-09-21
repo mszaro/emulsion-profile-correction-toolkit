@@ -70,4 +70,15 @@ class FrameEdgesTest < Minitest::Test
     left, = Emulsion::FrameEdges.detect(scan_with_border(border: deep)).picture
     assert_equal 0, left, "a crop past the cap should be refused rather than eat the picture"
   end
+
+  # A rebate fogged by a light leak reads too bright to be film. The side
+  # opposite it is the same width, so the crop borrows from there rather than
+  # leaving the fogged strip in the picture.
+  def test_a_side_with_no_rebate_borrows_from_the_side_opposite
+    edges = Emulsion::FrameEdges.detect(scan_with_border(border: 20, sides: %i[left right bottom]))
+    area = edges.picture
+    refute_nil area
+    assert_operator area[1], :>, 0, "the top is cropped by the width the bottom found"
+    assert_in_delta HEIGHT - area[1] - area[3], area[1], 3
+  end
 end

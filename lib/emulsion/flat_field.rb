@@ -26,6 +26,11 @@ module Emulsion
     # the pictures are, and lifting only magnifies grain.
     MAX_LIFT = 1.7
 
+    # How far a single channel may be lifted away from the other two. A real
+    # corner loses a little colour with its light; a crushed channel reads as
+    # losing far more than it did.
+    TINT_LIMIT = 0.35
+
     # Rings at the very corner, where a camera's own mask can cut in sharply,
     # are measured but not fitted.
     IGNORED_RINGS = 3
@@ -199,15 +204,25 @@ module Emulsion
         falloff = (squared * second + squared * squared * fourth + centre) / centre
         (falloff < 1e-3).ifthenelse(1e-3, falloff)**-1.0
       end
-      # The ceiling is on how much brighter a corner is made, and the three
-      # channels are held to each other through it, since capping each on its
-      # own would throw away the colour half of the correction and leave the
-      # corner tinted.
+      # A corner does lose colour along with light, but not by much, and a
+      # channel that reads as far down as Phoenix's red is reading its own
+      # crushed floor rather than the falloff. Each channel is held to within
+      # TINT_LIMIT stops of what the three of them do together.
       brightness = gains[0] * LUMA[0] + gains[1] * LUMA[1] + gains[2] * LUMA[2]
+      gains = gains.map { |gain| brightness * tint_held(gain, brightness) }
       held = (brightness > MAX_LIFT).ifthenelse(brightness**-1.0 * MAX_LIFT, 1.0)
       linear = Colour.to_linear(image)
       bands = (0..2).map { |c| linear[c] * ((gains[c] * held - 1.0) * strength + 1.0) }
       Colour.to_srgb(bands[0].bandjoin([bands[1], bands[2]])).copy(interpretation: :srgb)
+    end
+
+    # How far one channel's lift may sit from the lift the three make together,
+    # as a factor rather than in stops, so it can be multiplied straight back.
+    def tint_held(gain, brightness)
+      stops = (gain / brightness).log / Math.log(2)
+      held = (stops > TINT_LIMIT).ifthenelse(TINT_LIMIT, stops)
+      held = (held < -TINT_LIMIT).ifthenelse(-TINT_LIMIT, held)
+      (held * Math.log(2)).exp
     end
 
     def to_h

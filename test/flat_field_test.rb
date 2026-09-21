@@ -91,4 +91,15 @@ class FlatFieldTest < Minitest::Test
       assert_operator steps.max, :<, 0.004, "a ring would show as a step along the row"
     end
   end
+
+  # A channel reading far more falloff than the others is reading its own
+  # crushed floor, and lifting it that far paints a coloured ring on every
+  # frame. It is held to within TINT_LIMIT of what the three do together.
+  def test_one_channel_cannot_run_away_from_the_others
+    fit = Emulsion::FlatField.new([[1.0, -0.8, 0.0], [1.0, -0.3, 0.0], [1.0, -0.2, 0.0]])
+    frame = TestImages.linear_image(WIDTH, HEIGHT) { |_x, _y| [0.2, 0.2, 0.2] }
+    corner = TestImages.stops(TestImages.mean_pixel(fit.apply(frame), 2, 2, 10, 10))
+    assert_operator corner[1].abs, :<=, 2 * Emulsion::FlatField::TINT_LIMIT + 0.05
+    assert_operator corner[0].abs, :<=, 2 * Emulsion::FlatField::TINT_LIMIT + 0.05
+  end
 end

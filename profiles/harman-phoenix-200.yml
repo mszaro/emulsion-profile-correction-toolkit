@@ -41,6 +41,11 @@ roll_tone: 1.0
 # it, never past it, and only where the sky is.
 sky_floor: 0.75
 
+# The corners measure as losing a stop and a half of red, most of which is
+# the crushed red floor rather than the lens, and lifting that much leaves a
+# bright coloured ring around every frame. Better left as the camera made it.
+flat_field: 0.0
+
 # Once balanced its colour is not squashed, so the gamut fit has nothing to do.
 roll_fit: 0.0
 healthy_spread: 0.70
