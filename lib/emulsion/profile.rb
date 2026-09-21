@@ -8,11 +8,12 @@ module Emulsion
     DIR = File.expand_path("../../profiles", __dir__)
 
     REQUIRED = %i[black white neutral wb wb_clamp shadow_wb target_saturation
-                  max_vibrance knee max_stretch contrast chroma healthy_spread].freeze
+                  max_vibrance knee max_stretch contrast chroma].freeze
     OPTIONAL = %i[name saturation chroma_radius roll_fit reference roll_balance
                   roll_balance_limit film_gains frame_balance frame_balance_limit
                   roll_tone lost_colour chroma_map chroma_shape
-                  highlight_headroom sky_neutral sky_floor flat_field].freeze
+                  highlight_headroom sky_neutral sky_floor flat_field healthy_spread
+                  sky_headroom measured_frame_balance].freeze
 
     attr_reader :id, :name, :settings, :healthy_spread
 

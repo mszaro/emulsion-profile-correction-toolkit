@@ -41,13 +41,17 @@ YAML
 
 path = File.join(Emulsion::Profile::DIR, "#{profile.id}.yml")
 text = File.read(path)
-existing = /^# The film's own cast, per tone.*?\nfilm_gains:\n(?:  - .*\n)+/m
+# One line per entry: under /m a dot also matches a newline, so .* would
+# run on to the end of the profile and take every setting after it.
+existing = /^# The film's own cast, per tone.*?\nfilm_gains:\n(?:  - [^\n]*\n)+/m
 text = if text.match?(existing)
          text.sub(existing, block)
        else
          text.sub(/^(roll_balance: .*\n)/) { "#{Regexp.last_match(1)}\n#{block}\n" }
        end
 abort "could not find where to put film_gains in #{path}" unless text.include?(block)
+# Checked before it is written, so a bad edit never leaves a broken profile.
+Emulsion::Profile.new(profile.id, YAML.safe_load(text, permitted_classes: [], aliases: false, symbolize_names: true))
 File.write(path, text)
 Emulsion::Profile.load(profile.id)
 puts "wrote film_gains to #{path}"

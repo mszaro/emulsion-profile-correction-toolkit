@@ -8,7 +8,7 @@ module Emulsion
   class Reference
     DIR = File.expand_path("../../references", __dir__)
 
-    attr_reader :id, :name, :neutral, :tone_shape
+    attr_reader :id, :name, :neutral, :tone_shape, :healthy_spread
 
     def self.available
       Dir.glob(File.join(DIR, "*.yml")).map { |f| File.basename(f, ".yml") }.sort
@@ -47,10 +47,16 @@ module Emulsion
                              "#{ToneCurve::QUANTILES.join(', ')} percent"
       end
 
+      spread = data[:healthy_spread]
+      unless spread.nil? || (spread.is_a?(Numeric) && spread.between?(0.0, 1.0))
+        raise ArgumentError, "reference #{id} needs healthy_spread between 0 and 1"
+      end
+
       @id = id
       @name = data[:name] || id
       @neutral = neutral
       @tone_shape = shape
+      @healthy_spread = spread
     end
   end
 end

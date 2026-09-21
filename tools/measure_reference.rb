@@ -21,6 +21,7 @@ PER_ROLL = 60_000
 exts = Emulsion::CLI::EXTENSIONS.join(",")
 pixels = []
 shapes = []
+spreads = []
 dirs.each do |dir|
   paths = Dir.glob(File.join(File.expand_path(dir), "*.{#{exts}}")).uniq.sort
   abort "no images in #{dir}" if paths.empty?
@@ -33,6 +34,9 @@ dirs.each do |dir|
   roll = Emulsion::ColourBalance.linear_pixels(sample, offsets)
   pixels.concat(roll.each_slice([roll.size / PER_ROLL, 1].max).map(&:first))
   shapes << Emulsion::ToneCurve.shape_of(sample)
+  # How widely a well scanned roll spreads its colour, so the gamut fit knows
+  # what healthy looks like on the film it is aiming at.
+  spreads << Emulsion::GamutFit.new(sample, healthy_spread: 0.0, verbose: false).spread_before
 end
 
 # A well-scanned film has no large cast to find first, so each band is read
@@ -41,6 +45,7 @@ zero = Array.new(Emulsion::ColourBalance::TONES.size) { [0.0, 0.0] }
 neutral = Emulsion::ColourBalance.neutral_by_tone(pixels, from: zero)
 abort "too few pixels to measure a neutral" if neutral.compact.size < 2
 neutral = Emulsion::ColourBalance.fill_gaps(neutral)
+spread = Emulsion::Measurements.percentile(spreads.sort, 50)
 shape = shapes.transpose.map { |values| Emulsion::Measurements.percentile(values.sort, 50) }
 
 path = File.join(Emulsion::Reference::DIR, "#{id}.yml")
@@ -57,5 +62,9 @@ File.write(path, <<~YAML)
   # Where a typical frame's luma falls, at #{Emulsion::ToneCurve::QUANTILES.join(', ')} percent,
   # once stretched between its #{Emulsion::ToneCurve::BLACK} and #{Emulsion::ToneCurve::WHITE} percentiles.
   tone_shape: [#{shape.map { |v| format('%.3f', v) }.join(', ')}]
+
+  # How widely a typical roll spreads its colour across hues, the median of
+  # the rolls above. The gamut fit reopens a film toward this and no further.
+  healthy_spread: #{format('%.3f', spread)}
 YAML
 puts "wrote #{path}"

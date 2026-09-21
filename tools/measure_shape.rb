@@ -64,13 +64,17 @@ YAML
 
 path = File.join(Emulsion::Profile::DIR, "#{profile.id}.yml")
 text = File.read(path)
-existing = /^# How this film's colour sits against.*?\nchroma_map:\n(?:  \w+: .*\n)+/m
+# One line per entry: under /m a dot also matches a newline, so .* would
+# run on to the end of the profile and take every setting after it.
+existing = /^# How this film's colour sits against.*?\nchroma_map:\n(?:  \w+: [^\n]*\n)+/m
 text = if text.match?(existing)
          text.sub(existing, block)
        else
          text.sub(/^(film_gains:\n(?:  - .*\n)+)/) { "#{Regexp.last_match(1)}\n#{block}" }
        end
 abort "could not find where to put chroma_map in #{path}" unless text.include?("chroma_map:")
+# Checked before it is written, so a bad edit never leaves a broken profile.
+Emulsion::Profile.new(profile.id, YAML.safe_load(text, permitted_classes: [], aliases: false, symbolize_names: true))
 File.write(path, text)
 Emulsion::Profile.load(profile.id)
 puts "wrote chroma_map to #{path}"

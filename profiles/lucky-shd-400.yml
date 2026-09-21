@@ -16,14 +16,14 @@ roll_balance_limit: 1.0
 #   49603 Lucky SHD 400
 #   49604 Lucky SHD 400
 film_gains:
-  - [0.112, 0.030, -0.596]
-  - [-0.016, 0.090, -0.666]
-  - [0.105, 0.006, -0.291]
-  - [-0.966, 0.267, 1.124]
-  - [-0.612, 0.178, 1.484]
-  - [-0.416, 0.097, 1.694]
-  - [-0.346, 0.020, 1.812]
-  - [-0.060, 0.012, 0.087]
+  - [0.002, 0.069, -0.585]
+  - [-0.003, 0.088, -0.676]
+  - [-0.131, 0.049, -0.053]
+  - [-0.931, 0.267, 1.073]
+  - [-0.672, 0.200, 1.536]
+  - [-0.391, 0.097, 1.644]
+  - [-0.401, 0.031, 1.927]
+  - [-0.061, 0.011, 0.090]
 
 # How this film's colour sits against FujiFilm Superia 200 and 400, after the gains
 # above have done what they can, measured by tools/measure_shape.rb from:
@@ -34,8 +34,8 @@ film_gains:
 #   49612 FujiFilm Superia 400
 #   49613 FujiFilm Superia 400
 chroma_map:
-  matrix: [1.2843, 0.6252]
-  offset: [-0.6172, 0.3472]
+  matrix: [1.2628, 0.6220]
+  offset: [-0.5783, 0.3230]
 
 # The map above is bent onto Superia in full, and then the pixels whose blue
 # arrived with nothing in it are eased partway toward grey. The two work on
@@ -60,7 +60,6 @@ roll_tone: 0.5
 
 # Once balanced its colour is not squashed, so the gamut fit has nothing to do.
 roll_fit: 0.0
-healthy_spread: 0.70
 
 # The frame balance above does this job, so the older balance is off.
 neutral: 0.0

@@ -11,15 +11,19 @@ name: "FujiFilm Superia 200 and 400"
 # Neutral is [red, blue] in stops relative to green, at each tone band.
 tones: [0.003, 0.008, 0.02, 0.05, 0.1, 0.2, 0.4, 0.7]
 neutral:
-  - [0.161, -0.138]
-  - [0.029, 0.031]
-  - [-0.092, -0.003]
-  - [-0.063, -0.229]
-  - [0.077, -0.228]
-  - [0.137, -0.160]
-  - [0.099, 0.052]
-  - [0.034, 0.024]
+  - [0.107, -0.150]
+  - [0.028, 0.030]
+  - [-0.077, -0.003]
+  - [-0.058, -0.233]
+  - [0.075, -0.234]
+  - [0.145, -0.171]
+  - [0.094, 0.053]
+  - [0.034, 0.023]
 
 # Where a typical frame's luma falls, at 1, 5, 10, 25, 50, 75, 90, 95, 99 percent,
 # once stretched between its 0.4 and 99.7 percentiles.
-tone_shape: [0.007, 0.030, 0.055, 0.198, 0.484, 0.741, 0.908, 0.944, 0.989]
+tone_shape: [0.007, 0.032, 0.059, 0.200, 0.498, 0.746, 0.913, 0.946, 0.990]
+
+# How widely a typical roll spreads its colour across hues, the median of
+# the rolls above. The gamut fit reopens a film toward this and no further.
+healthy_spread: 0.597
