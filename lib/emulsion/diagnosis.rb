@@ -141,7 +141,7 @@ module Emulsion
       cast: [:roll_balance, "roll balance toward the reference", :on],
       blue_exhausted: [:lost_colour, "easing lost colour toward grey", :on],
       crushed_channel: [nil, "shadow lift held back on the frame", :on],
-      clipped: [:highlight_headroom, "highlight headroom", :on],
+      clipped: [:recovery, "highlight reconstruction", :on],
       grain: [:chroma, "chroma denoise", :on],
       corner_tint: [:flat_field, "corner lift", :off]
     }.freeze
