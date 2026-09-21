@@ -50,4 +50,51 @@ class SkyTest < Minitest::Test
   def test_a_yellow_sky_is_still_found
     refute_nil Emulsion::Sky.mask(frame(sky: [0.42, 0.38, 0.22]))
   end
+
+  def sky_stops(image, mask)
+    share = mask.avg
+    linear = Emulsion::Colour.to_linear(image)
+    v = (0..2).map { |c| (linear[c] * mask).avg / share }
+    [Math.log2(v[0] / v[1]), Math.log2(v[2] / v[1])]
+  end
+
+  # A sky may be any blue it likes, so a blue one is left exactly alone.
+  def test_a_blue_sky_is_left_alone
+    frame = frame(sky: [0.24, 0.30, 0.52])
+    mask = Emulsion::Sky.mask(frame)
+    refute_nil mask
+    assert_operator (Emulsion::Sky.level(frame, mask, 0.75) - frame).abs.max, :<, 1e-6
+  end
+
+  def test_a_warm_sky_is_brought_back_to_neutral
+    frame = frame(sky: [0.42, 0.38, 0.22])
+    mask = Emulsion::Sky.mask(frame)
+    before = sky_stops(frame, mask)
+    after = sky_stops(Emulsion::Sky.level(frame, mask, 0.75), mask)
+    assert_operator before[1], :<, -0.5, "it started warm"
+    assert_in_delta 0.0, after[1], 0.08, "and lands at neutral"
+    assert_operator after[0], :<=, 0.05, "with red no higher than green"
+  end
+
+  def test_it_moves_no_further_than_the_cap
+    frame = frame(sky: [0.55, 0.40, 0.10])
+    mask = Emulsion::Sky.mask(frame)
+    before = sky_stops(frame, mask)
+    after = sky_stops(Emulsion::Sky.level(frame, mask, 0.4), mask)
+    assert_operator after[1] - before[1], :<=, 0.45
+  end
+
+  def test_no_sky_means_no_change
+    frame = frame(sky: [0.42, 0.38, 0.22])
+    assert_operator (Emulsion::Sky.level(frame, nil, 0.75) - frame).abs.max, :<, 1e-6
+    assert_operator (Emulsion::Sky.level(frame, Emulsion::Sky.mask(frame), 0.0) - frame).abs.max, :<, 1e-6
+  end
+
+  # The ground is not the sky, and the correction stays off it.
+  def test_the_ground_keeps_its_colour
+    frame = frame(sky: [0.42, 0.38, 0.22])
+    levelled = Emulsion::Sky.level(frame, Emulsion::Sky.mask(frame), 0.75)
+    patch = [10, H - 20, W - 20, 10]
+    assert_operator (levelled.extract_area(*patch) - frame.extract_area(*patch)).abs.max, :<, 0.02
+  end
 end

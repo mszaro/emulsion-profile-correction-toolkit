@@ -48,6 +48,9 @@ module Emulsion
       srgb = apply_endpoints(srgb, points)
       srgb = @tone.apply(srgb) if @tone
       srgb = s_curve(srgb, @o[:contrast])
+      # Late, on the finished tones, since a sky that is level here is level in
+      # the picture: the stretch and the curve both move colour on the way.
+      srgb = level_sky(srgb)
       srgb = recover(srgb)
       # Measured once, since the grain tells the denoise how hard to work and
       # the softness tells the sharpening what to do.
@@ -98,6 +101,15 @@ module Emulsion
 
       frame.strength = @o[:frame_balance]
       shape(with_headroom(frame).apply(scan))
+    end
+
+    # A sky may be any blue it likes and may be grey, and may not come out
+    # warm, which is the one thing measurement supports saying about it.
+    def level_sky(srgb)
+      room = @o[:sky_floor].to_f
+      return srgb unless room.positive?
+
+      Sky.level(srgb, Sky.mask(srgb), room)
     end
 
     # A sky is a large smooth surface sitting near neutral, which is exactly
@@ -213,10 +225,18 @@ module Emulsion
       (image - y) * k + y
     end
 
+    # The stretch clips as surely as a gain does, and on a near white sky it is
+    # the channel that was already highest that goes first, which leaves the
+    # sky reading as that channel's colour. Given headroom, such a pixel is
+    # darkened instead.
     def apply_endpoints(image, points)
       lo = points.map(&:first)
       span = points.map { |p| [p[1] - p[0], 1e-6].max }
-      Colour.clamp01((image - lo) / span)
+      stretched = (image - lo) / span
+      room = @o[:highlight_headroom].to_f
+      return Colour.clamp01(stretched) unless room.positive?
+
+      Colour.to_srgb(Highlights.pull(Colour.to_linear(stretched), room)).copy(interpretation: :srgb)
     end
 
     # Contrast around mid grey. The minus matters: sin is positive below mid

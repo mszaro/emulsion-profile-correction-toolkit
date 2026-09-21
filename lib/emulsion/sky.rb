@@ -32,7 +32,7 @@ module Emulsion
     # has to cover before it is believed.
     REACH = 0.62
     TOP_BAND = 0.06
-    TOP_COVER = 0.35
+    TOP_COVER = 0.25
 
     # The least of the frame worth excluding, and the most colour variation a
     # sky may hold. A lit vault or a ceiling passes everything above and fails
@@ -40,9 +40,78 @@ module Emulsion
     MIN_SHARE = 0.04
     MAX_VARIATION = 0.18
 
-    # Returns a 0 or 1 mask of the sky, or nil when the frame does not hold one
-    # the detector is willing to name. `srgb` is float sRGB in 0..1.
+    # How far the edge of the correction is blurred, as a share of the width.
+    FEATHER = 0.01
+
+    # Half the scans carry an orientation tag, and up is the whole point here,
+    # so the frame is stood upright to be read and the mask is turned back to
+    # match the pixels the caller holds. A tag that flips rather than turns is
+    # rare enough to decline.
+    TURNS = { 1 => nil, 3 => "d180", 6 => "d270", 8 => "d90" }.freeze
+
     def mask(srgb)
+      orientation = srgb.get_typeof("orientation").zero? ? 1 : srgb.get("orientation")
+      return nil unless TURNS.key?(orientation)
+
+      found = upright_mask(srgb.autorot)
+      return nil unless found
+
+      back = TURNS[orientation]
+      back ? found.rot(back) : found
+    end
+
+    # The one thing a sky may be told about its colour.
+    #
+    # Measured across 14 Superia daylight frames, deep blue through overcast,
+    # a sky's blue against green runs from +0.04 to +1.74 stops and is never
+    # negative, and its red against green never passes +0.02. So a floor is
+    # defensible where a target would not be: a sky may be any blue it likes,
+    # and may be grey, and may not come out warm. Golden hour is safe, because
+    # the light lands on what the sky is over rather than on the sky.
+    #
+    # The correction is local to the mask, feathered at its edge, and capped,
+    # so a frame where the detector is wrong loses very little.
+    def level(srgb, mask, limit)
+      return srgb if mask.nil? || limit <= 0
+
+      share = mask.avg
+      return srgb if share <= 0
+
+      linear = Colour.to_linear(srgb)
+      stops = (0..2).map { |c| (linear[c] * mask).avg / share }
+      blue = Math.log2(stops[2] / stops[1])
+      red = Math.log2(stops[0] / stops[1])
+      lift = [[-blue, 0.0].max, limit].min
+      cut = [[red, 0.0].max, limit].min
+      return srgb if lift.zero? && cut.zero?
+
+      feather = mask.gaussblur([srgb.width * FEATHER, 1.0].max)
+      gains = [2**-cut, 1.0, 2**lift]
+      moved = (0..2).map { |c| linear[c] * (feather * (gains[c] - 1.0) + 1.0) }
+      Colour.to_srgb(Colour.clamp01(moved[0].bandjoin([moved[1], moved[2]]))).copy(interpretation: :srgb)
+    end
+
+    # Read at one size whatever the frame's own. Texture is what separates a
+    # sky from a wall of brickwork, and at full resolution the grain of the
+    # film is texture too, so the same frame would answer differently at every
+    # scale. Small enough that grain averages away, large enough that a roof
+    # line does not.
+    WORK = 900
+
+    # Returns a 0 or 1 mask of the sky, or nil when the frame does not hold one
+    # the detector is willing to name. `srgb` is float sRGB in 0..1, upright.
+    def upright_mask(frame)
+      scale = WORK.to_f / frame.width
+      srgb = scale < 1.0 ? frame.resize(scale) : frame
+      found = found_in(srgb)
+      return nil unless found
+      return found if srgb.width == frame.width
+
+      grown = found.resize(frame.width.to_f / srgb.width)
+      grown.embed(0, 0, frame.width, frame.height, extend: :copy)
+    end
+
+    def found_in(srgb)
       luma = (srgb * LUMA).bandmean * 3.0
       candidate = bright(luma) & flat(luma, srgb) & high(srgb)
       candidate = settle(candidate, srgb)

@@ -150,10 +150,11 @@ module Emulsion
         puts "sampling roll of #{all.size} frames..."
         # Sampled inside the picture when the borders are coming off anyway,
         # since overscan and rebate are not part of any scene.
+        skip = options[:sky_neutral] ? ->(image) { Sky.mask(image) } : nil
         sample = if options[:fix].include?(:crop)
-                   RollSample.collect(all) { |image| FrameEdges.detect(image).picture }
+                   RollSample.collect(all, skip: skip) { |image| FrameEdges.detect(image).picture }
                  else
-                   RollSample.collect(all)
+                   RollSample.collect(all, skip: skip)
                  end
         if want[:balance] && !fits[:balance]
           puts "balancing the roll toward #{reference.name}..."
@@ -428,6 +429,10 @@ module Emulsion
         opts.on("--recovery FLOAT", Float,
                 "Strength of the shadow and highlight recovery, 0 to 1",
                 "(default #{DEFAULTS[:recovery]}).") { |v| options[:recovery] = v }
+        opts.on("--sky-floor STOPS", Float,
+                "How far a sky that came out warm may be brought back toward",
+                "neutral (default #{DEFAULTS[:sky_floor]}). Never pushed past it, and",
+                "never applied to a sky that is already blue.") { |v| options[:sky_floor] = v }
         opts.on("--[no-]sky-neutral",
                 "Keep a detected sky out of the frame's neutral estimate",
                 "(default #{DEFAULTS[:sky_neutral]}). A pale sky is large, smooth and",

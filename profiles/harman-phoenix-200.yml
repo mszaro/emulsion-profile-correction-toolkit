@@ -34,6 +34,13 @@ frame_balance_limit: 0.6
 # meet them, so the roll is given Superia's tonal spread.
 roll_tone: 1.0
 
+# Several daylight frames come back with a cream sky while the buildings in
+# the same frame are properly white, because a sky is not grey and the
+# balance is fitted on greys. Measured on Superia, a daylight sky never
+# comes out warmer than neutral, so one that does here is brought back to
+# it, never past it, and only where the sky is.
+sky_floor: 0.75
+
 # Once balanced its colour is not squashed, so the gamut fit has nothing to do.
 roll_fit: 0.0
 healthy_spread: 0.70

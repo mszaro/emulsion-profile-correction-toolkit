@@ -53,6 +53,7 @@ module Emulsion
     sharpness: 0.7,
     highlight_headroom: 0.0,
     sky_neutral: false,
+    sky_floor: 0.0,
     lost_colour: 0.0,
     chroma_map: nil,
     chroma_shape: 0.0,
