@@ -113,13 +113,16 @@ module Emulsion
     def balance(scan)
       roll = @balance && (@floor ? @balance.with_offsets(@floor) : @balance)
       scan = with_headroom(roll, scan).apply(scan) if roll
-      # The colour shaping runs whether or not the frame is balanced, since a
-      # roll the lab kept steady still has the film's own colour to reshape.
+      # A roll steady enough to need no frame balance still has the film's own
+      # colour to reshape, so the shaping runs without one.
       return shape(scan) unless @reference && @o[:frame_balance].positive?
 
       frame = ColourBalance.fit_frame(scan, @reference.neutral, limit: @o[:frame_balance_limit],
                                                                 skip: sky_in(scan))
-      return shape(scan) unless frame
+      # A frame the fit could not read is not one to infer lost colour on
+      # either: the shaping assumes a frame balanced to the reference, and on a
+      # dark interior it reads backlit amber glass as stone with no blue left.
+      return scan unless frame
 
       frame.strength = @o[:frame_balance]
       shape(with_headroom(frame, scan).apply(scan))
