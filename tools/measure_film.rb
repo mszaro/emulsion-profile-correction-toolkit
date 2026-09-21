@@ -25,7 +25,9 @@ samples = dirs.map do |dir|
   abort "no images in #{dir}" if paths.empty?
 
   puts File.basename(dir)
-  Emulsion::RollSample.collect(paths)
+  # Inside the picture, as measure_shape.rb samples, since the scanner's
+  # borders are not part of any scene.
+  Emulsion::RollSample.collect(paths) { |image| Emulsion::FrameEdges.detect(image).picture }
 end
 
 gains = Emulsion::ColourBalance.fit_film(samples, reference.neutral)

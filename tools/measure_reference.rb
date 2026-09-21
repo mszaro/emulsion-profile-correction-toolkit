@@ -26,7 +26,9 @@ dirs.each do |dir|
   abort "no images in #{dir}" if paths.empty?
 
   puts File.basename(dir)
-  sample = Emulsion::RollSample.collect(paths)
+  # Inside the picture, as measure_shape.rb samples, since the scanner's
+  # borders are not part of any scene.
+  sample = Emulsion::RollSample.collect(paths) { |image| Emulsion::FrameEdges.detect(image).picture }
   offsets = Emulsion::ColourBalance.black_offsets(sample)
   roll = Emulsion::ColourBalance.linear_pixels(sample, offsets)
   pixels.concat(roll.each_slice([roll.size / PER_ROLL, 1].max).map(&:first))
