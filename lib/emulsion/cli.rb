@@ -134,6 +134,7 @@ module Emulsion
                                    # so the headroom it had changes the balance it settles on.
                                    highlight_headroom: options[:highlight_headroom],
                                    sky_neutral: options[:sky_neutral],
+                                   sky_floor: options[:sky_floor],
                                    fix: options[:fix].sort)
       cached = AnalysisCache.load(destination, key) || {}
       fits = {}
