@@ -27,6 +27,11 @@ scans came in, and the originals are never touched. `--help` lists every
 setting, any of which can be overridden, and `--profile` also takes the path
 to a profile file of your own for a film that isn't listed here.
 
+`--explain` names what a roll measures as wrong with it, each with a
+confidence, and stops. `--audit` adds what the profile does about each one,
+and says when a stage is switched off that the roll needs, or on when it has
+nothing to do.
+
 ## Output formats
 
 `--format` takes tiff, jpeg, png, heic or jp2, and `--bits` sets the depth
@@ -102,53 +107,24 @@ its profile, from as many and as varied rolls as you have:
 bundle exec ruby tools/measure_film.rb lucky-shd-400 ~/scans/roll1 ~/scans/roll2 ~/scans/roll3
 ```
 
-## Where a channel ran out
+## Past what a gain can reach
 
-Balancing greys onto the reference gets a film most of the way, because greys
-are what the balance is measured on. Saturated subjects stay where the film's
-own dyes left them: Lucky's sunlit limestone arrives with its blue two and a
-half stops under where a grey of the same brightness sits, against a third of
-a stop for the same stone on Superia. No per-channel gain reaches that, since
-the gain that would fix the stone would turn every grey in the frame blue.
+Gains land greys on the reference, since greys are what they are measured on.
+Where a channel is exhausted they cannot help: Lucky's sunlit stone records
+almost no blue, and the gain that would fix the stone would turn every grey in
+the frame blue. These settings deal with what is left, each off unless a
+profile or the command line asks.
 
-Two stages work on it, both off unless a profile or the command line asks.
-
-`--chroma-shape` bends the film's colour onto the reference's. The spread and
-centre of each film's colour are measured as stops of red and blue against
-green, over the tones between the noise and the clipping, and the straight map
-that takes one onto the other is fitted and kept in the profile. Where a
-channel is exhausted the map reaches it through the channels that are not. It
-is inference: the two films photographed similar places rather than the same
-frames, so the map is only as good as that likeness.
-
-```bash
-bundle exec ruby tools/measure_shape.rb lucky-shd-400 --reference ~/scans/superia1,~/scans/superia2 ~/scans/lucky1 ~/scans/lucky2
-```
-
-`--lost-colour` handles the pixels the map cannot help. How far each pixel's
-blue has fallen below what a grey of that brightness holds is measured against
-the reference, and the pixels that have fallen furthest are eased toward grey,
-never all the way. A blue sky or a red awning in the same frame keeps its
-colour, because its blue still carries something. The map fades out over the
-same measurement, so the two divide the frame between them: the map reshapes
-the colour that survived, and the easing takes the shout out of the colour
-that did not.
-
-
-### When a gain has nowhere to go
-
-A correction can also fail at the other end. Lucky's sky arrives with its blue
-below its green, and the balance rightly asks for about two stops of blue
-there, but the sky is already near the top of the range: blue stops at white
-while green carries on up with the tone work, and the sky lands pale cyan.
-Nothing downstream can undo it, because clipped pixels no longer differ from
-each other.
-
-`--highlight-headroom` gives the gain somewhere to go. A pixel that would be
-pushed past white is darkened instead, by up to the stops it is given, which
-keeps the colour the gains asked for and spends brightness on it. Only pixels
-that would clip move at all. On the Lucky rolls it takes a sky from 1.11 on
-blue against green to 1.50, where Superia's skies sit between 1.15 and 1.73.
+- `--chroma-shape` bends the film's colour onto the reference's, through the
+  channels that still work. `tools/measure_shape.rb PROFILE --reference
+  REF_DIR ROLL_DIR` fits the map into the profile.
+- `--lost-colour` eases the pixels whose blue has fallen furthest toward grey,
+  never all the way, so a blue sky in the same frame keeps its colour.
+- `--highlight-headroom` darkens a pixel a gain would push past white rather
+  than letting it clip, which is what left Lucky's skies pale cyan.
+- `--sky-floor` brings a sky that came out warmer than neutral back to it, and
+  never past it. Measured on Superia, a daylight sky is never warmer than
+  neutral.
 
 ## Beyond the film
 
@@ -225,12 +201,6 @@ Lucky's ISO 400 colour negative film. Scans of it look shot through a yellow
 filter: blue sags two to three stops behind green through the upper midtones
 while the whites stay clean, and red rides a little high, so pale blues and
 cyans turn yellow.
-
-On warm subjects in warm light its blue layer records almost nothing at all,
-so how yellow that sunlit stone really was is no longer in the file. The
-profile bends what colour survived onto Superia's shape and eases the rest
-partway toward grey, which is the closest thing to an honest answer the scan
-still supports.
 
 ![Geneva cathedral before and after](examples/000051-before-after.jpg)
 
