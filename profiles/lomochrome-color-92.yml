@@ -36,6 +36,11 @@ roll_tone: 0.0
 # spreads its colour wider than Superia does.
 roll_fit: 0.0
 
+# Overcast skies come back cream, as they do on Phoenix. A daylight sky is
+# never warmer than neutral on Superia, so one that is here is brought back
+# to neutral, never past it, and only where the sky is.
+sky_floor: 0.75
+
 # The scans come back bleached, so each frame is boosted toward this mean
 # saturation. The boost is strongest on greyish colours and halves at the knee.
 target_saturation: 0.42
