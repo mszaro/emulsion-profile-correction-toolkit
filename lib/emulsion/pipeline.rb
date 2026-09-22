@@ -26,7 +26,7 @@ module Emulsion
 
     # The correction on a loaded frame, a float sRGB image in 0..1.
     def render(scan)
-      srgb_in = apply_roll_fit(balance(trim(scan)))
+      srgb_in = settled(apply_roll_fit(balance(trim(scan))))
 
       # Colour is measured and corrected in linear light, where a gain is what
       # it claims to be. Tone work happens later, in display space.
@@ -37,21 +37,21 @@ module Emulsion
       # with the colour, and again after, since it lifts leftover cast hardest.
       linear = apply_tone_gains(linear, measured.tone_gains(@o[:wb], @o[:wb_clamp],
                                                             @o[:shadow_wb]))
-      linear = vibrance(linear, vibrance_amount(measured), @o[:knee])
+      linear = settled(vibrance(linear, vibrance_amount(measured), @o[:knee]))
       after = Measurements.new(linear)
       linear = apply_tone_gains(linear, after.tone_gains(@o[:wb] * SECOND_PASS,
                                                          @o[:wb_clamp], @o[:shadow_wb]))
 
-      srgb = Colour.to_srgb(linear)
+      srgb = settled(Colour.to_srgb(linear))
       points = Measurements.new(srgb).endpoints(@o[:black], @o[:white], @o[:neutral],
                                                 max_stretch: @o[:max_stretch])
       srgb = apply_endpoints(srgb, points)
       srgb = @tone.apply(srgb) if @tone
-      srgb = s_curve(srgb, contrast_for(points))
+      srgb = settled(s_curve(srgb, contrast_for(points)))
       # Late, on the finished tones, since a sky that is level here is level in
       # the picture: the stretch and the curve both move colour on the way.
       srgb = level_sky(srgb)
-      srgb = recover(srgb)
+      srgb = settled(recover(srgb))
       # Measured once, since the grain tells the denoise how hard to work and
       # the softness tells the sharpening what to do.
       detail = fix?(:sharpen) || fix?(:grain) ? Detail.measure(srgb) : nil
@@ -60,6 +60,17 @@ module Emulsion
     end
 
     private
+
+    # A stage's pixels, worked out and kept.
+    #
+    # A vips image is a recipe rather than pixels, and every consumer of it runs
+    # that recipe again. This pipeline branches at almost every stage, a blur
+    # beside the original, a base and its detail, a measurement off an
+    # intermediate, so without this the early stages are computed over and over:
+    # a 24 megapixel frame took 195 seconds and takes 22 with it.
+    def settled(image)
+      image.copy_memory
+    end
 
     # Everything that has to happen before the frame is measured: the scanner's
     # borders off, and the corners brought back up. The borders are also where
