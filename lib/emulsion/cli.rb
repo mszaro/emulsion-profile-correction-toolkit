@@ -197,10 +197,12 @@ module Emulsion
       fits
     end
 
-    # The profile's frame balance is a ceiling, and how much of it a roll gets
-    # follows how far its lab actually moved from frame to frame. A roll that
-    # reads no steadier than Superia gets none, since balancing it would only
-    # be balancing its scenes.
+    # Off by default, and kept for a roll that wants it named on the command
+    # line. The reading does not separate: the seven Superia rolls, which have
+    # no drift to find, read 0.18 to 0.30 stops, and the Phoenix rolls read
+    # 0.23 to 0.65. Letting it hold the frame balance back left a whole
+    # LomoChrome roll with red shadows, at a* +15 to +23 where the frame
+    # balance brings them to +0.3 to +8. --explain still reports the drift.
     def measure_frame_balance(source, reference, options)
       return options unless reference && options[:frame_balance].positive? && options[:measured_frame_balance]
 
@@ -518,8 +520,9 @@ module Emulsion
                 "at 100. Always 4:4:4.") { |v| options[:quality] = v }
         opts.on("--previews", "--jpeg", "Also write 1600px preview JPEGs.") { |v| options[:previews] = v }
         opts.on("--[no-]measured-frame-balance",
-                "Scale the frame balance by how far the lab drifted frame to",
-                "frame on this roll (default #{DEFAULTS[:measured_frame_balance]}).") { |v| options[:measured_frame_balance] = v }
+                "Hold the frame balance back on a roll whose frames measure",
+                "steady (default #{DEFAULTS[:measured_frame_balance]}). The reading does not",
+                "separate well, so this is off.") { |v| options[:measured_frame_balance] = v }
         opts.on("--contact-sheet",
                 "Also write contact.jpg, every frame of the roll on one sheet",
                 "with its number under it.") { |v| options[:contact_sheet] = v }

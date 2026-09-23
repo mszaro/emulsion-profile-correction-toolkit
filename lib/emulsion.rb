@@ -61,7 +61,7 @@ module Emulsion
     sky_floor: 0.0,
     sky_headroom: 0.0,
     contact_sheet: false,
-    measured_frame_balance: true,
+    measured_frame_balance: false,
     lost_colour: 0.0,
     chroma_map: nil,
     chroma_shape: 0.0,
