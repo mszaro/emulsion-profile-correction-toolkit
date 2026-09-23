@@ -38,6 +38,10 @@ module Emulsion
     # sky may hold. A lit vault or a ceiling passes everything above and fails
     # this: a real sky is even, a room is not.
     MIN_SHARE = 0.04
+
+    # How far under each line a pixel still counts for something.
+    SOFT_LUMA = 0.10
+    SOFT_REACH = 0.12
     MAX_VARIATION = 0.18
 
     # How far the edge of the correction is blurred, as a share of the width.
@@ -111,44 +115,75 @@ module Emulsion
       grown.embed(0, 0, frame.width, frame.height, extend: :copy)
     end
 
+    # How much of each pixel is sky, from 0 to 1, and how sure the frame is that
+    # it holds one at all. A verdict threw away every frame that sat near a
+    # line, which turned out to be most of the frames whose skies were wrong:
+    # the floor never ran on them.
     def found_in(srgb)
       luma = (srgb * LUMA).bandmean * 3.0
-      candidate = bright(luma) & flat(luma, srgb) & high(srgb)
-      candidate = settle(candidate, srgb)
-      share = candidate.avg / 255.0
-      return nil if share < MIN_SHARE
-      return nil unless reaches_the_top?(candidate, srgb)
-      return nil if variation(srgb, candidate, share) > MAX_VARIATION
+      weight = bright(luma) * flat(luma, srgb) * high(srgb)
+      weight = settle(weight, srgb)
+      share = weight.avg
+      return nil if share < MIN_SHARE / 2.0
 
-      candidate / 255.0
+      sure = confidence(weight, srgb, share)
+      return nil if sure <= 0.05
+
+      weight * sure
+    end
+
+    # How much the frame is believed, from how much of it the sky covers, how
+    # much of the top edge it reaches, and how evenly its colour holds together.
+    def confidence(weight, srgb, share)
+      band = weight.extract_area(0, 0, srgb.width, [(srgb.height * TOP_BAND).to_i, 1].max)
+      ramp(share, MIN_SHARE / 2.0, MIN_SHARE * 1.5) *
+        ramp(band.avg, TOP_COVER / 2.0, TOP_COVER) *
+        ramp(variation(srgb, weight, share), MAX_VARIATION * 1.6, MAX_VARIATION * 0.7)
+    end
+
+    # From nothing at `absent` to all of it at `present`, either way round.
+    def ramp(value, absent, present)
+      ((value - absent) / (present - absent)).clamp(0.0, 1.0)
     end
 
     # Brightness is read in display space, where the percentile and the floor
-    # both mean what they look like.
+    # both mean what they look like. A pixel a little under the line counts for
+    # part of one rather than for nothing.
     def bright(luma)
       cut = [(luma * 255.0).cast(:uchar).percent(BRIGHT_PERCENTILE) / 255.0, BRIGHT_FLOOR].max
-      luma > cut
+      # The floor stays hard, since nothing under it is a daylight sky, and
+      # only the frame's own percentile is softened.
+      soft(luma, cut - SOFT_LUMA, cut) * (luma > BRIGHT_FLOOR).ifthenelse(1.0, 0.0)
     end
 
     # Flat for its size: local detail against a blur of the same radius.
     def flat(luma, srgb)
       radius = [srgb.width * BLUR, 1.0].max
-      (luma - luma.gaussblur(radius)).abs.gaussblur(radius) < TEXTURE
+      detail = (luma - luma.gaussblur(radius)).abs.gaussblur(radius)
+      soft(detail, TEXTURE * 2.0, TEXTURE)
     end
 
     def high(srgb)
-      Vips::Image.xyz(srgb.width, srgb.height)[1] < srgb.height * REACH
+      rows = Vips::Image.xyz(srgb.width, srgb.height)[1] / srgb.height.to_f
+      soft(rows, REACH + SOFT_REACH, REACH)
     end
 
-    # Speckle is not sky. A blur and a threshold keep the regions that have
-    # neighbours and drop the pixels that do not.
-    def settle(candidate, srgb)
-      (candidate.gaussblur([srgb.width * BLUR * 2, 1.0].max) > 140)
+    # Speckle is not sky. A blur keeps the regions that have neighbours and
+    # fades the pixels that do not.
+    def settle(weight, srgb)
+      weight.gaussblur([srgb.width * BLUR * 2, 1.0].max)
+    end
+
+    # A smooth step from 0 at `absent` to 1 at `present`, either way round.
+    def soft(image, absent, present)
+      t = ((image - absent) / (present - absent))
+      t = (t < 0).ifthenelse(0, (t > 1).ifthenelse(1, t))
+      t * t * (t * -2.0 + 3.0)
     end
 
     def reaches_the_top?(candidate, srgb)
       band = candidate.extract_area(0, 0, srgb.width, [(srgb.height * TOP_BAND).to_i, 1].max)
-      band.avg / 255.0 >= TOP_COVER
+      band.avg >= TOP_COVER
     end
 
     # How much the colour wanders inside the region, in stops of blue against
@@ -158,7 +193,7 @@ module Emulsion
       green = (linear[1] < 1e-5).ifthenelse(1e-5, linear[1])
       blue = (linear[2] < 1e-5).ifthenelse(1e-5, linear[2])
       stops = (blue / green).log / Math.log(2)
-      weight = candidate / 255.0
+      weight = candidate
       mean = (stops * weight).avg / share
       square = (stops * stops * weight).avg / share
       Math.sqrt([square - mean * mean, 0.0].max)

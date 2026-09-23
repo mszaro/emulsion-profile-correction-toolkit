@@ -97,4 +97,28 @@ class SkyTest < Minitest::Test
     patch = [10, H - 20, W - 20, 10]
     assert_operator (levelled.extract_area(*patch) - frame.extract_area(*patch)).abs.max, :<, 0.02
   end
+  # Graded rather than a verdict: a frame near the line gets part of the
+  # correction where it used to get none, which is what left the floor sitting
+  # idle on the frames whose skies were wrong.
+  def test_the_weight_is_graded_between_nothing_and_all_of_it
+    mask = Emulsion::Sky.mask(frame)
+    refute_nil mask
+    assert_operator mask.max, :<=, 1.0
+    assert_operator mask.min, :>=, 0.0
+    inside = mask.extract_area(10, 10, W - 20, SKY - 20).avg
+    below = mask.extract_area(10, SKY + 20, W - 20, 20).avg
+    assert_operator inside, :>, 0.8
+    assert_operator below, :<, 0.05
+  end
+
+  # A sky the detector is less sure of is corrected less, rather than not at
+  # all: half the weight moves it half as far.
+  def test_a_weaker_sky_is_levelled_less
+    warm = frame(sky: [0.42, 0.38, 0.22])
+    mask = Emulsion::Sky.mask(warm)
+    full = sky_stops(Emulsion::Sky.level(warm, mask, 0.75), mask)
+    half = sky_stops(Emulsion::Sky.level(warm, mask * 0.5, 0.75), mask)
+    before = sky_stops(warm, mask)
+    assert_operator (half[1] - before[1]).abs, :<, (full[1] - before[1]).abs
+  end
 end
