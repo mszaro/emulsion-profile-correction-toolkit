@@ -30,6 +30,10 @@ to a profile file of your own for a film that isn't listed here.
 `--contact-sheet` writes contact.jpg beside the corrected frames, the whole
 roll on one sheet with each frame numbered.
 
+A roll takes every core by default. `--gentle` uses half of them at a low
+priority, so the machine stays usable for other work, and `--threads N` caps
+them at a number of your choosing.
+
 `--explain` names what a roll measures as wrong with it, each with a
 confidence, and stops. `--audit` adds what the profile does about each one,
 and says when a stage is switched off that the roll needs, or on when it has

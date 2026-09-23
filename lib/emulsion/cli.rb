@@ -1,6 +1,7 @@
 require "optparse"
 require "fileutils"
 require "yaml"
+require "etc"
 
 module Emulsion
   # Command line front end. Corrects every scan in a folder and writes the
@@ -28,6 +29,7 @@ module Emulsion
       flags = { previews: false }
       parser = build_parser(flags)
       parser.parse!(argv)
+      share_the_machine(flags)
 
       source = argv.shift
       unless source
@@ -215,6 +217,20 @@ module Emulsion
       share = Diagnosis.ramp(drift, *Diagnosis::LINES[:lab_drift].first(2))
       puts format("  frame to frame drift %.2f stops, so frame balance at %.0f%%", drift, share * 100)
       options.merge(frame_balance: options[:frame_balance] * share)
+    end
+
+    # By default libvips takes a thread per core and a roll takes the machine.
+    # --threads caps that, and --gentle takes half the cores and drops to a
+    # low priority, so a roll can run under other work.
+    GENTLE_NICENESS = 10
+
+    def share_the_machine(flags)
+      threads = flags[:threads]
+      if flags[:gentle]
+        threads ||= [Etc.nprocessors / 2, 1].max
+        Process.setpriority(Process::PRIO_PROCESS, 0, GENTLE_NICENESS)
+      end
+      Vips.concurrency_set(threads) if threads&.positive?
     end
 
     # The diagnosis on its own, with no frame written.
@@ -523,6 +539,11 @@ module Emulsion
                 "Hold the frame balance back on a roll whose frames measure",
                 "steady (default #{DEFAULTS[:measured_frame_balance]}). The reading does not",
                 "separate well, so this is off.") { |v| options[:measured_frame_balance] = v }
+        opts.on("--threads N", Integer,
+                "Threads for the image work (default: one per core).") { |v| options[:threads] = v }
+        opts.on("--gentle",
+                "Use half the cores at low priority, so the machine stays",
+                "usable for other work while a roll corrects.") { |v| options[:gentle] = v }
         opts.on("--contact-sheet",
                 "Also write contact.jpg, every frame of the roll on one sheet",
                 "with its number under it.") { |v| options[:contact_sheet] = v }
