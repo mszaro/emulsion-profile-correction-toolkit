@@ -146,8 +146,10 @@ A bare `--fix` turns on the usual set, `--fix all` turns on everything, and
   own rendering of unexposed film, which beats guessing the floor from the
   picture, and it follows the lab's balance as it drifts from frame to frame.
 - `flat` measures how much light the corners lose, across the whole roll so
-  the subjects cancel out, and gives it back. Each channel is measured on its
-  own, since corners usually lose colour along with light.
+  the subjects cancel out, and gives it back. It needs `flat_field` in the
+  profile as well, and none of the films here set it: measured on rolls of
+  sky and dark ground the subjects do not cancel, and the lift paints a
+  coloured halo across a clear sky.
 - `shadows` opens crushed shadows and pulls back held highlights, by as much
   as each frame has to give, and estimates channels that clipped at white
   from the ones that survived.

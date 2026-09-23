@@ -49,7 +49,9 @@ module Emulsion
     frame_balance_limit: 2.5,
     roll_tone: 0.0,
     fix: [],
-    flat_field: 1.0,
+    # Off unless a profile asks: the falloff is measured across a roll, and a
+    # roll of skies and dark ground does not average out the way the fit needs.
+    flat_field: 0.0,
     recovery: 1.0,
     sharpness: 0.7,
     highlight_headroom: 0.0,

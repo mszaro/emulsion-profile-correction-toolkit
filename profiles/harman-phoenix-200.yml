@@ -42,8 +42,8 @@ roll_tone: 1.0
 sky_floor: 0.75
 
 # The corners measure as losing a stop and a half of red, most of which is
-# the crushed red floor rather than the lens, and lifting that much leaves a
-# bright coloured ring around every frame. Better left as the camera made it.
+# the crushed red floor rather than the lens, so the lift stays off here as
+# it does everywhere else.
 flat_field: 0.0
 
 # Once balanced its colour is not squashed, so the gamut fit has nothing to do.
