@@ -81,6 +81,7 @@ module Emulsion
       FileUtils.mkdir_p(preview_dir) if options[:previews]
 
       overrides = load_overrides(options[:overrides])
+      sheet = options[:contact_sheet] ? ContactSheet.new(File.basename(source)) : nil
       puts "profile: #{profile.name}"
 
       options = measure_frame_balance(source, reference, options)
@@ -102,11 +103,14 @@ module Emulsion
           (result * 255).cast(:uchar).thumbnail_image(1600, size: :down)
                         .jpegsave(jpeg, Q: 92)
         end
+        sheet&.add(result, stem)
         puts "  [#{i + 1}/#{files.size}] #{name} -> #{File.basename(written)}"
       end
 
       File.write(File.join(destination, "settings.yml"),
                  YAML.dump(options.transform_keys(&:to_s)))
+      made = sheet&.write(File.join(destination, "contact.jpg"))
+      puts "contact sheet -> #{File.basename(made)}" if made
       puts "done"
       0
     end
@@ -516,6 +520,9 @@ module Emulsion
         opts.on("--[no-]measured-frame-balance",
                 "Scale the frame balance by how far the lab drifted frame to",
                 "frame on this roll (default #{DEFAULTS[:measured_frame_balance]}).") { |v| options[:measured_frame_balance] = v }
+        opts.on("--contact-sheet",
+                "Also write contact.jpg, every frame of the roll on one sheet",
+                "with its number under it.") { |v| options[:contact_sheet] = v }
         opts.on("--explain", "Say what the roll shows is wrong with it, and stop.") { |v| options[:explain] = v }
         opts.on("--audit", "Say what the roll shows and what the profile does",
                 "about each thing, and stop.") { |v| options[:audit] = v }
