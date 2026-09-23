@@ -56,7 +56,10 @@ module Emulsion
       # the softness tells the sharpening what to do.
       detail = fix?(:sharpen) || fix?(:grain) ? Detail.measure(srgb) : nil
       srgb = denoise_chroma(srgb, chroma_for(detail), chroma_radius_for(srgb))
-      fix?(:sharpen) ? Detail.sharpen(srgb, detail, @o[:sharpness]) : srgb
+      srgb = fix?(:sharpen) ? Detail.sharpen(srgb, detail, @o[:sharpness]) : srgb
+      # Again at the end: the tone curve, the contrast and the recovery all
+      # push pixels back over the top after the stretch has fitted them.
+      Gamut.fit(srgb, headroom_for(nil))
     end
 
     private
@@ -280,11 +283,7 @@ module Emulsion
     def apply_endpoints(image, points)
       lo = points.map(&:first)
       span = points.map { |p| [p[1] - p[0], 1e-6].max }
-      stretched = (image - lo) / span
-      room = headroom_for(nil)
-      return Colour.clamp01(stretched) unless room.positive?
-
-      Colour.to_srgb(Highlights.pull(Colour.to_linear(stretched), room)).copy(interpretation: :srgb)
+      Gamut.fit((image - lo) / span, headroom_for(nil))
     end
 
     # Contrast around mid grey. The minus matters: sin is positive below mid
