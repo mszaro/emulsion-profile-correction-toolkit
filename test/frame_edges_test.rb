@@ -81,4 +81,19 @@ class FrameEdgesTest < Minitest::Test
     assert_operator area[1], :>, 0, "the top is cropped by the width the bottom found"
     assert_in_delta HEIGHT - area[1] - area[3], area[1], 3
   end
+
+
+  # The rebate is found by being dark and even, and grain is uneven, so a scan
+  # at its own size read differently from the same scan shrunk. It is read at
+  # one working size now, and a border a quarter of the way in is still a
+  # border when the frame is four times the width.
+  def test_the_same_scan_reads_the_same_at_any_size
+    small = scan_with_border(border: 20)
+    large = small.resize(4)
+    found = Emulsion::FrameEdges.detect(small).picture
+    grown = Emulsion::FrameEdges.detect(large).picture
+    refute_nil found
+    refute_nil grown
+    found.each_with_index { |value, i| assert_in_delta value * 4, grown[i], 12, "edge #{i}" }
+  end
 end

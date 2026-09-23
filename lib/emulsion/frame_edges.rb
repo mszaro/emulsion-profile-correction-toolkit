@@ -39,9 +39,19 @@ module Emulsion
 
     attr_reader :sides
 
+    # Read at one size whatever the scan's own. The rebate is found by being
+    # dark and even, and at 6144px the film's own grain is nearly as uneven as
+    # FLAT_SD allows, so whether a frame's border is found comes down to how
+    # grainy that frame happens to be: on one roll it was found on one frame in
+    # eight at scan size and on eight in eight here.
+    WORK = 1200
+
     # Looks along all four sides of a float sRGB image in 0..1.
     def self.detect(image)
-      sides = %i[left right top bottom].to_h { |side| [side, scan_side(image, side)] }
+      scale = WORK.to_f / image.width
+      read = scale < 1.0 ? image.resize(scale) : image
+      sides = %i[left right top bottom].to_h { |side| [side, scan_side(read, side)] }
+      sides = sides.transform_values { |side| side && side.merge(edge: (side[:edge] / scale).round) } if scale < 1.0
       new(sides, image.width, image.height)
     end
 
