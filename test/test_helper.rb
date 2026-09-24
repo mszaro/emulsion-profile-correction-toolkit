@@ -13,7 +13,11 @@ module TestImages
       width.times { |x| values.concat(yield(x, y)) }
     end
     linear = Vips::Image.new_from_memory(values.pack("f*"), width, height, 3, :float)
-    Emulsion::Colour.to_srgb(linear).copy(interpretation: :srgb)
+    # Copied into libvips' own memory before it is handed out. An image built
+    # over a Ruby string lost its hold on that string somewhere down a chain of
+    # operations, and when the collector freed it the pipeline read garbage:
+    # an average came back NaN in about half the runs of one pair of tests.
+    Emulsion::Colour.to_srgb(linear).copy(interpretation: :srgb).copy_memory
   end
 
   # Stops of red and blue against green for one linear pixel.

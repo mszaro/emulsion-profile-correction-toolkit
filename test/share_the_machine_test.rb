@@ -27,9 +27,11 @@ class ShareTheMachineTest < Minitest::Test
     Process.getpriority(Process::PRIO_PROCESS, 0)
   end
 
+  # libvips takes its default from VIPS_CONCURRENCY when the environment sets
+  # it, and from the core count when it does not.
   def test_by_default_every_core_is_used_at_the_inherited_priority
     threads, niceness = settings_after
-    assert_equal Etc.nprocessors, threads
+    assert_equal (ENV["VIPS_CONCURRENCY"] || Etc.nprocessors).to_i, threads
     assert_equal inherited, niceness
   end
 
