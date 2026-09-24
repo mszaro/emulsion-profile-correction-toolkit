@@ -228,7 +228,10 @@ module Emulsion
       threads = flags[:threads]
       if flags[:gentle]
         threads ||= [Etc.nprocessors / 2, 1].max
-        Process.setpriority(Process::PRIO_PROCESS, 0, GENTLE_NICENESS)
+        # Only ever lower the priority. A process already running nicer than
+        # this may not raise itself back without root, and would fail trying.
+        now = Process.getpriority(Process::PRIO_PROCESS, 0)
+        Process.setpriority(Process::PRIO_PROCESS, 0, GENTLE_NICENESS) if now < GENTLE_NICENESS
       end
       Vips.concurrency_set(threads) if threads&.positive?
     end
