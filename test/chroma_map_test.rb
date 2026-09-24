@@ -20,15 +20,29 @@ class ChromaMapTest < Minitest::Test
   def test_fit_finds_the_stretch_between_two_clouds
     film = cloud(centre: [0.4, -1.2], spread: [0.5, 1.2])
     reference = cloud(centre: [-0.2, 0.1], spread: [0.5, 0.6], seed: 9)
-    map = Emulsion::ChromaMap.fit(film, reference)
+    map = Emulsion::ChromaMap.fit(film, reference, [0.0, 0.0])
     refute_nil map
     assert_operator map.matrix[1], :<, 0.9, "blue spread should be pulled in"
-    assert_operator map.offset[1], :>, 0.3, "and its centre moved up"
+  end
+
+  # The centres are the scenes' typical colour, and the two films shot
+  # different scenes, so a grey is left where the balance put it.
+  def test_fit_leaves_grey_where_it_is
+    grey = [0.05, -0.12]
+    film = cloud(centre: [0.4, -1.2], spread: [0.5, 1.2])
+    reference = cloud(centre: [-0.2, 0.1], spread: [0.8, 0.6], seed: 9)
+    map = Emulsion::ChromaMap.fit(film, reference, grey)
+    (0..1).each { |axis| assert_in_delta grey[axis], grey[axis] * map.matrix[axis] + map.offset[axis], 1e-9 }
+  end
+
+  def test_grey_is_the_reference_neutral_across_the_fitted_tones
+    neutral = Array.new(8) { |i| [i * 0.1, -i * 0.1] }
+    assert_equal [0.4, -0.4], Emulsion::ChromaMap.grey_of(neutral).map { |v| v.round(9) }
   end
 
   def test_too_few_pixels_fits_nothing
     assert_nil Emulsion::ChromaMap.fit(cloud(centre: [0, 0], spread: [0.2, 0.2], count: 100),
-                                       cloud(centre: [0, 0], spread: [0.2, 0.2], count: 100))
+                                       cloud(centre: [0, 0], spread: [0.2, 0.2], count: 100), [0.0, 0.0])
   end
 
   def test_zero_strength_changes_nothing

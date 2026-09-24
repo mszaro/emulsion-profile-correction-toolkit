@@ -46,9 +46,45 @@ def pixels_of(dirs, exts, film_gains, target)
   end
 end
 
-film = pixels_of(dirs, exts, profile.settings[:film_gains], reference.neutral)
-shot = pixels_of(reference_dirs, exts, nil, reference.neutral)
-map = Emulsion::ChromaMap.fit(film, shot) or abort "too few pixels to measure a shape"
+# Each frame as the map receives it: the roll's balance, when the film has
+# one, then the frame's own. Both films are read this way, since a frame
+# balance narrows how far colour spreads across a roll, and a spread from
+# one side without it would read as the film's own.
+def balanced_pixels(dirs, exts, settings, reference)
+  options = Emulsion::DEFAULTS.merge(settings).merge(fix: %i[crop floor], chroma_shape: 0.0, lost_colour: 0.0)
+  dirs.flat_map do |dir|
+    paths = Dir.glob(File.join(File.expand_path(dir), "*.{#{exts}}")).uniq.sort
+    abort "no images in #{dir}" if paths.empty?
+
+    puts File.basename(dir)
+    balance = nil
+    if settings[:film_gains]
+      sample = Emulsion::RollSample.collect(paths) { |image| Emulsion::FrameEdges.detect(image).picture }
+      balance = Emulsion::ColourBalance.fit_roll(sample, reference.neutral, film: settings[:film_gains])
+      balance.strength = options[:roll_balance]
+    end
+    pixels = paths.each_with_index.flat_map do |path, i|
+      print "\r  balancing #{i + 1}/#{paths.size}"
+      frame = Emulsion::Pipeline.new(options, balance: balance, reference: reference)
+                                .balanced(Emulsion::Colour.load(path))
+      # Every sixteenth of the frame balance's own sample: single pixels,
+      # since averaging neighbours would narrow the spread.
+      frame ? Emulsion::ColourBalance.frame_pixels(frame).each_slice(16).map(&:first) : []
+    end
+    puts
+    pixels
+  end
+end
+
+if profile.settings[:frame_balance].to_f.positive?
+  film = balanced_pixels(dirs, exts, profile.settings, reference)
+  shot = balanced_pixels(reference_dirs, exts, { frame_balance: 1.0 }, reference)
+else
+  film = pixels_of(dirs, exts, profile.settings[:film_gains], reference.neutral)
+  shot = pixels_of(reference_dirs, exts, nil, reference.neutral)
+end
+map = Emulsion::ChromaMap.fit(film, shot, Emulsion::ChromaMap.grey_of(reference.neutral)) or
+  abort "too few pixels to measure a shape"
 puts map.report
 
 block = <<~YAML

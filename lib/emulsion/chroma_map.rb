@@ -24,22 +24,30 @@ module Emulsion
 
     attr_reader :matrix, :offset
 
-    # Pixels are [red, green, blue] in linear light, already through the
-    # per-channel correction, so only the shape of what is left is fitted.
-    def self.fit(film_pixels, reference_pixels)
+    # Pixels are [red, green, blue] in linear light, both already balanced to
+    # the reference's neutral, so only the shape of what is left is fitted.
+    #
+    # Each axis is stretched about `grey`, [red, blue] stops against green, so
+    # greys stay where the balance put them. Matching the two clouds' centres
+    # as well moved every grey on Lucky half a stop cool: the centres are the
+    # scenes' typical colour, and the two films photographed different scenes.
+    def self.fit(film_pixels, reference_pixels, grey)
       film = moments(film_pixels)
       reference = moments(reference_pixels)
       return nil unless film && reference
 
-      # Match spread and centre on each axis: the plainest map that takes one
-      # cloud onto the other without needing the same frames in both.
       scale = (0..1).map do |axis|
         next 1.0 if film[:spread][axis] <= 1e-6
 
         (reference[:spread][axis] / film[:spread][axis]).clamp(1.0 / MAX_STRETCH, MAX_STRETCH)
       end
-      shift = (0..1).map { |axis| reference[:centre][axis] - scale[axis] * film[:centre][axis] }
-      new(scale, shift)
+      new(scale, (0..1).map { |axis| grey[axis] * (1.0 - scale[axis]) })
+    end
+
+    # A reference's grey across the tones the map is fitted over, from its
+    # neutral at each tone.
+    def self.grey_of(neutral)
+      (0..1).map { |c| BANDS.sum { |i| neutral[i][c] } / BANDS.size.to_f }
     end
 
     # The centre and spread of the colour cloud, in stops of red and blue

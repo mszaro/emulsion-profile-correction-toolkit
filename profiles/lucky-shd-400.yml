@@ -34,8 +34,8 @@ film_gains:
 #   49612 FujiFilm Superia 400
 #   49613 FujiFilm Superia 400
 chroma_map:
-  matrix: [1.2628, 0.6220]
-  offset: [-0.5783, 0.3230]
+  matrix: [1.3828, 0.6288]
+  offset: [-0.0137, -0.0437]
 
 # The map above is bent onto Superia in full, and then the pixels whose blue
 # arrived with nothing in it are eased partway toward grey. The two work on
