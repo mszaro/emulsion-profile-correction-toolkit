@@ -10,18 +10,37 @@ module Emulsion
     SECOND_PASS = 0.35
 
     # The roll's fits, any of which may be nil: its colour balance and tone
-    # curve toward the reference, its gamut fit, and the falloff in its corners.
-    def initialize(options, balance: nil, tone: nil, fit: nil, flat: nil, reference: nil)
+    # curve toward the reference, its gamut fit, the falloff in its corners,
+    # and how its frames typically tilt from warm highlights to cool shadows.
+    def initialize(options, balance: nil, tone: nil, fit: nil, flat: nil, tilt: nil, reference: nil)
       @o = options
       @balance = balance
       @tone = tone
       @roll = fit
       @flat = flat
+      @tilt = tilt
       @reference = reference
     end
 
     def call(path)
       render(Colour.load(path))
+    end
+
+    # How the frame tilts as the frame balance sees it, measured on each of the
+    # roll's frames to find what is typical for the roll.
+    def tilt(scan)
+      WarmLight.tilt(roll_balanced(trim(scan)), @reference.neutral)
+    end
+
+    # The frame as the colour shaping receives it: trimmed, then the roll's
+    # balance and its own. Nil when the frame balance could not read it, since
+    # such a frame is not shaped.
+    def balanced(scan)
+      scan = roll_balanced(trim(scan))
+      return scan unless frame_balance?
+
+      frame = frame_fit(scan)
+      frame && with_headroom(frame, scan).apply(scan)
     end
 
     # The correction on a loaded frame, a float sRGB image in 0..1.
@@ -125,21 +144,47 @@ module Emulsion
     # The roll's colour balance, then this frame's own, which takes out how far
     # the lab's balance drifted on this frame in particular.
     def balance(scan)
-      roll = @balance && (@floor ? @balance.with_offsets(@floor) : @balance)
-      scan = with_headroom(roll, scan).apply(scan) if roll
+      scan = roll_balanced(scan)
       # A roll steady enough to need no frame balance still has the film's own
       # colour to reshape, so the shaping runs without one.
-      return shape(scan) unless @reference && @o[:frame_balance].positive?
+      return shape(scan) unless frame_balance?
 
-      frame = ColourBalance.fit_frame(scan, @reference.neutral, limit: @o[:frame_balance_limit],
-                                                                skip: sky_in(scan))
+      frame = frame_fit(scan)
       # A frame the fit could not read is not one to infer lost colour on
       # either: the shaping assumes a frame balanced to the reference, and on a
       # dark interior it reads backlit amber glass as stone with no blue left.
       return scan unless frame
 
-      frame.strength = @o[:frame_balance]
       shape(with_headroom(frame, scan).apply(scan))
+    end
+
+    def frame_balance?
+      @reference && @o[:frame_balance].positive?
+    end
+
+    def frame_fit(scan)
+      frame = ColourBalance.fit_frame(scan, @reference.neutral, limit: @o[:frame_balance_limit],
+                                                                skip: sky_in(scan))
+      return nil unless frame
+
+      frame = keep_warmth(frame, scan)
+      frame.strength = @o[:frame_balance]
+      frame
+    end
+
+    def roll_balanced(scan)
+      roll = @balance && (@floor ? @balance.with_offsets(@floor) : @balance)
+      roll ? with_headroom(roll, scan).apply(scan) : scan
+    end
+
+    # Warm light the frame balance should leave alone: lamps it finds itself,
+    # and whatever share a frame's own settings ask it to keep, which is the
+    # only way sunlit golden hour survives.
+    def keep_warmth(frame, scan)
+      held = @o[:keep_warmth].to_f
+      guard = @o[:lamp_guard].to_f
+      held = [held, guard * WarmLight.confidence(scan, @reference.neutral, @tilt)].max if guard.positive? && @tilt
+      held.positive? ? WarmLight.hold(frame, held.clamp(0.0, 1.0)) : frame
     end
 
     # A sky may be any blue it likes and may be grey, and may not come out

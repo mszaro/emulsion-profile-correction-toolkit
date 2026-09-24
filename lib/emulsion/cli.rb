@@ -130,7 +130,8 @@ module Emulsion
         # The gamut fit reopens a film toward what healthy looks like, which the
         # reference measured; a profile may still say so itself.
         fit: options[:roll_fit].positive? && !healthy_spread(profile, reference).nil?,
-        flat: options[:fix].include?(:flat) && options[:flat_field].positive?
+        flat: options[:fix].include?(:flat) && options[:flat_field].positive?,
+        tilt: reference && options[:frame_balance].positive? && options[:lamp_guard].positive?
       }
       return {} unless want.values.any?
 
@@ -155,8 +156,11 @@ module Emulsion
       fits[:tone] = ToneCurve.from_cache(cached[:tone]) if want[:tone] && cached[:tone]
       fits[:fit] = GamutFit.from_cache(cached[:fit]) if want[:fit] && cached[:fit]
       fits[:flat] = FlatField.from_cache(cached[:flat]) if want[:flat] && cached[:flat]
+      fits[:tilt] = cached[:tilt] if want[:tilt] && cached[:tilt]
 
-      if want.any? { |name, wanted| wanted && !fits[name] }
+      # The tilt is measured last, on the finished balance, so it alone
+      # missing is no reason to sample the roll again.
+      if want.except(:tilt).any? { |name, wanted| wanted && !fits[name] }
         if want[:flat] && !fits[:flat]
           puts "measuring the falloff in the corners..."
           fits[:flat] = FlatField.fit(all) { |_path, image| FrameEdges.detect(image).picture }
@@ -196,7 +200,32 @@ module Emulsion
         fits[name].strength = options[setting]
         puts fits[name].report
       end
-      fits
+      if want[:tilt] && !fits[:tilt]
+        puts "measuring how the roll's frames tilt..."
+        fits[:tilt] = roll_tilt(all, options, fits, reference)
+        AnalysisCache.save(destination, key, **fits) if fits[:tilt]
+      end
+      puts format("frames tilt %+.2f stops per e-fold from shadows to highlights", fits[:tilt]) if fits[:tilt]
+      fits.compact
+    end
+
+    # The median of how the roll's frames tilt, as the frame balance sees them.
+    # A frame is only read as lamp lit by tilting well past this, since some
+    # films and some lab sessions tilt every frame.
+    def roll_tilt(paths, options, fits, reference)
+      tilts = paths.filter_map do |path|
+        Pipeline.new(options, reference: reference, **fits.slice(:balance, :flat)).tilt(small(path))
+      end
+      tilts.empty? ? nil : ColourBalance.percentile(tilts, 50)
+    end
+
+    # A frame at the size the roll's measurements read it, in memory, since a
+    # thumbnail is read once through and the pipeline goes over a frame several
+    # times.
+    def small(path)
+      image = Vips::Image.thumbnail(path, TUNE_WIDTH, size: :down).copy_memory
+      image = image[0..2] if image.bands > 3
+      image.cast(:float) / (image.format == :ushort ? 65535.0 : 255.0)
     end
 
     # Off by default, and kept for a roll that wants it named on the command
@@ -271,15 +300,11 @@ module Emulsion
     # finished picture, and nudges the roll's balance until they land right.
     def tune_balance(paths, options, fits, reference)
       step = [paths.size / TUNE_FRAMES, 1].max
-      frames = paths.each_slice(step).map(&:first).first(TUNE_FRAMES).map do |path|
-        # Into memory, since a thumbnail is read once through and the pipeline
-        # goes over a frame several times.
-        image = Vips::Image.thumbnail(path, TUNE_WIDTH, size: :down).copy_memory
-        image = image[0..2] if image.bands > 3
-        image.cast(:float) / (image.format == :ushort ? 65535.0 : 255.0)
-      end
+      frames = paths.each_slice(step).map(&:first).first(TUNE_FRAMES).map { |path| small(path) }
       TUNE_ROUNDS.times do
-        rendered = frames.map { |image| Pipeline.new(options, reference: reference, **fits).render(image) }
+        # Without the lamp guard, which measures frames against the balance
+        # this settles on.
+        rendered = frames.map { |image| Pipeline.new(options, reference: reference, **fits.except(:tilt)).render(image) }
         # The sky is kept out here too. The tuning reads the greys of finished
         # frames, and a sky would vote in this estimate exactly as it does in
         # the frame's own.
@@ -450,6 +475,12 @@ module Emulsion
         opts.on("--frame-balance-limit STOPS", Float,
                 "How far the frame balance may move a frame, easing off",
                 "toward this many stops (default #{DEFAULTS[:frame_balance_limit]}).") { |v| options[:frame_balance_limit] = v }
+        opts.on("--lamp-guard FLOAT", Float,
+                "How much of a lamp lit frame's warmth the frame balance leaves,",
+                "0 to 1, by how sure it is of the lamps (default #{DEFAULTS[:lamp_guard]}).") { |v| options[:lamp_guard] = v }
+        opts.on("--keep-warmth FLOAT", Float,
+                "Share of the frame balance's warm to cool move to leave out,",
+                "0 to 1, for golden hour. Best as a per-frame override.") { |v| options[:keep_warmth] = v }
         opts.on("--roll-tone FLOAT", Float,
                 "Strength of the roll's tone curve toward the reference's",
                 "tones, 0 to 1. Only with a reference.") { |v| options[:roll_tone] = v }

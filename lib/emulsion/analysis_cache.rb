@@ -14,7 +14,7 @@ module Emulsion
     VERSION = 4
 
     SOURCES = %w[gamut_fit.rb roll_sample.rb colour_balance.rb tone_curve.rb flat_field.rb
-                 frame_edges.rb].freeze
+                 frame_edges.rb warm_light.rb].freeze
 
     # Inputs is a hash of whatever else the fits were made from.
     def key(paths, inputs)
@@ -47,11 +47,12 @@ module Emulsion
 
     # The stored fits are raw, before their strengths scale them, so changing
     # a strength reuses them. Any fit may be absent.
-    def save(destination, key, fit: nil, balance: nil, tone: nil, flat: nil)
+    def save(destination, key, fit: nil, balance: nil, tone: nil, flat: nil, tilt: nil)
       data = { "key" => key }
       data["balance"] = balance.to_h if balance
       data["tone"] = tone.to_h if tone
       data["flat"] = flat.to_h if flat
+      data["tilt"] = tilt if tilt
       if fit
         data["fit"] = {
           "gains" => fit.gains,

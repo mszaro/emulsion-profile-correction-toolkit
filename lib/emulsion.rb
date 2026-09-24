@@ -20,6 +20,7 @@ require_relative "emulsion/detail"
 require_relative "emulsion/highlights"
 require_relative "emulsion/gamut"
 require_relative "emulsion/sky"
+require_relative "emulsion/warm_light"
 require_relative "emulsion/diagnosis"
 require_relative "emulsion/contact_sheet"
 require_relative "emulsion/lost_colour"
@@ -49,6 +50,8 @@ module Emulsion
     film_gains: nil,
     frame_balance: 0.0,
     frame_balance_limit: 2.5,
+    lamp_guard: 1.0,
+    keep_warmth: 0.0,
     roll_tone: 0.0,
     fix: [],
     # Off unless a profile asks: the falloff is measured across a roll, and a
