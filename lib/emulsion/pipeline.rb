@@ -32,6 +32,14 @@ module Emulsion
       WarmLight.tilt(roll_balanced(trim(scan)), @reference.neutral)
     end
 
+    # The frame's own fit on top of the roll's balance, as the frame balance
+    # makes it before its strength and any warmth held back. Nil when the fit
+    # cannot read the frame.
+    def frame_drift(scan)
+      scan = roll_balanced(trim(scan))
+      ColourBalance.fit_frame(scan, @reference.neutral, limit: @o[:frame_balance_limit], skip: sky_in(scan))
+    end
+
     # The frame as the colour shaping receives it: trimmed, then the roll's
     # balance and its own. Nil when the frame balance could not read it, since
     # such a frame is not shaped.

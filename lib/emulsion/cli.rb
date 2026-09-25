@@ -147,6 +147,7 @@ module Emulsion
                                    highlight_headroom: options[:highlight_headroom],
                                    sky_headroom: options[:sky_headroom],
                                    frame_balance: options[:frame_balance],
+                                   frame_balance_limit: options[:frame_balance_limit],
                                    sky_neutral: options[:sky_neutral],
                                    sky_floor: options[:sky_floor],
                                    fix: options[:fix].sort)
@@ -178,6 +179,7 @@ module Emulsion
           puts "balancing the roll toward #{reference.name}..."
           fits[:balance] = ColourBalance.fit_roll(sample, reference.neutral, film: options[:film_gains],
                                                                              limit: options[:roll_balance_limit])
+          fits[:balance] = share_frame_drift(all, options, fits[:balance], reference)
         end
         if fits[:balance]
           fits[:balance].strength = options[:roll_balance]
@@ -207,6 +209,25 @@ module Emulsion
       end
       puts format("frames tilt %+.2f stops per e-fold from shadows to highlights", fits[:tilt]) if fits[:tilt]
       fits.compact
+    end
+
+    # A roll's drift is what its frames have in common. The roll fit reads it
+    # from every frame's pixels pooled, where the greys nearest neutral come
+    # from the few frames already near it, and on Lucky it left the typical
+    # frame a stop short of blue for the frame balance, which eases off before
+    # it gets there. So each frame is fitted on its own, and the median of
+    # those fits goes into the roll's balance, in the share the frame balance
+    # would have taken.
+    def share_frame_drift(paths, options, balance, reference)
+      return balance unless options[:frame_balance].positive?
+
+      frames = paths.filter_map do |path|
+        Pipeline.new(options, balance: balance, reference: reference).frame_drift(small(path))
+      end
+      return balance if frames.size < 3
+
+      puts "  taking what the frames share into the roll's balance"
+      balance.with_shared(frames, options[:frame_balance])
     end
 
     # The median of how the roll's frames tilt, as the frame balance sees them.
