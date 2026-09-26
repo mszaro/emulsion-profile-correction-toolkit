@@ -445,17 +445,6 @@ module Emulsion
       copy
     end
 
-    # This balance with `share` of what several frame fits have in common,
-    # the median of their gains at each tone, added on.
-    def with_shared(fits, share = 1.0)
-      shared = TONES.each_index.map do |i|
-        (0..2).map { |c| self.class.percentile(fits.map { |fit| fit.gains[i][c] }, 50) * share }
-      end
-      copy = self.class.new(@offsets, @gains.zip(shared).map { |own, add| own.zip(add).map(&:sum) })
-      copy.strength = strength
-      copy
-    end
-
     def to_h
       { "offsets" => @offsets, "gains" => @gains }
     end
