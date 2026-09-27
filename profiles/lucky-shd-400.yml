@@ -5,9 +5,11 @@ name: Lucky SHD 400
 # scans look shot through a yellow filter, and red rides a little high. Each
 # roll is balanced toward how Superia renders neutral, tone by tone: by the
 # film's own cast below, then by up to a stop more for how its lab session
-# drifted.
+# drifted. It is taken about three quarters of the way, which keeps some of
+# the film's warmth: side by side, the full correction bleached the stone
+# and turned skies pink.
 reference: fujifilm-superia
-roll_balance: 1.0
+roll_balance: 0.78
 roll_balance_limit: 1.0
 
 # The film's own cast, per tone, as [red, green, blue] stops, measured by
@@ -37,12 +39,12 @@ chroma_map:
   matrix: [1.3828, 0.6288]
   offset: [-0.0137, -0.0437]
 
-# The map above is bent onto Superia in full, and then the pixels whose blue
+# The map above is bent partway onto Superia, and then the pixels whose blue
 # arrived with nothing in it are eased partway toward grey. The two work on
 # different pixels: the map reshapes the colour that survived, and the easing
 # takes the shout out of the colour that did not.
-chroma_shape: 1.0
-lost_colour: 0.5
+chroma_shape: 0.6
+lost_colour: 0.3
 
 # A gain of two stops on a sky that is already bright has nowhere to go, and
 # blue stops at white while green carries on up, which leaves the sky pale
@@ -52,7 +54,7 @@ highlight_headroom: 1.5
 
 # Then each frame on its own, since the lab balanced every frame differently,
 # some by two stops or more.
-frame_balance: 1.0
+frame_balance: 0.7
 frame_balance_limit: 2.5
 
 # Tones come back a little bunched toward the highlights.
@@ -68,12 +70,18 @@ wb_clamp: 1.8
 shadow_wb: 0.8
 
 target_saturation: 0.26
-max_vibrance: 1.5
+max_vibrance: 1.1
 knee: 0.22
 
 black: 0.4
 white: 99.7
 max_stretch: 3.2
-contrast: 0.10
+contrast: 0.065
 
 chroma: 0.7
+
+# Lamps at dusk keep half their warmth. A lit train interior held in full
+# came out red; a dusk skyline wants all of it, which an override can ask.
+lamp_guard: 0.5
+
+sharpness: 0.5
