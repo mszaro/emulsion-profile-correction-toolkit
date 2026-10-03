@@ -1,182 +1,115 @@
 # Emulsion Profile Correction Toolkit
 
-## Overview
+A command-line tool for fixing colour casts, flat contrast and colour noise in
+lab scans of colour negative film.
 
-Scanning software turns a colour negative into a positive using a profile for
-that particular film. SilverFast's NegaFix and lab scanners only have profiles
-for common stocks, so anything unusual gets scanned as if it were Kodak Gold or
-Ultramax and comes back as a poor Kodak emulation, washed out and colour
-shifted. This toolkit corrects those scans afterwards. Each supported film has
-a profile describing how its scans go wrong, and the correction looks at the
-whole roll at once, since most of the scanning error is common to every frame
-while the subjects change. What the lab got wrong on one frame in particular
-is then taken out frame by frame.
+Labs don't always have a scanning profile for the film you've shot. Using a
+profile for another stock can leave the scans washed out or with odd colours.
+This toolkit corrects those scans using a profile for the film. It measures the
+whole roll first, then adjusts each frame.
+
+## Install
+
+You'll need Ruby 4.0 or later, Bundler and [libvips](https://www.libvips.org/).
+Install libvips with your package manager (`brew install vips` on macOS), then
+run this from the project directory:
+
+```sh
+bundle install
+```
 
 ## Usage
 
-You need Ruby 4.0 or later and [libvips](https://www.libvips.org/)
-(`dnf install vips`, `apt install libvips` or `brew install vips`), then
-`bundle install`. Point it at a folder of scans and name the film:
+Put the scans from one roll in a folder and choose a film profile:
 
-```bash
-./bin/emulsion --profile lomochrome-color-92 ~/scans/"47791 Lomography Color 92"
+```sh
+bundle exec ./bin/emulsion --profile lomochrome-color-92 ~/scans/my-roll
 ```
 
-Corrected copies go to a new folder beside the original, in the format the
-scans came in, and the originals are never touched. `--help` lists every
-setting, any of which can be overridden, and `--profile` also takes the path
-to a profile file of your own for a film that isn't listed here.
+It reads TIFF, JPEG and PNG files. Corrected copies go to
+`~/scans/my-roll - corrected`, using the same file format as the originals.
+The originals are left alone. The output folder also gets a `settings.yml`
+with the settings used for the run.
 
-`--contact-sheet` writes contact.jpg beside the corrected frames, the whole
-roll on one sheet with each frame numbered.
+For previews and a contact sheet:
 
-A roll takes every core by default. `--gentle` uses half of them at a low
-priority, so the machine stays usable for other work, and `--threads N` caps
-them at a number of your choosing.
+```sh
+bundle exec ./bin/emulsion --profile lomochrome-color-92 \
+  --previews --contact-sheet --gentle ~/scans/my-roll
+```
 
-`--explain` names what a roll measures as wrong with it, each with a
-confidence, and stops. `--audit` adds what the profile does about each one,
-and says when a stage is switched off that the roll needs, or on when it has
-nothing to do.
+Some useful options:
+
+| Option | What it does |
+| --- | --- |
+| `--out DIR` | Choose the output folder. |
+| `--previews` | Save 1600px JPEG previews in a `preview/` subfolder. |
+| `--contact-sheet` | Save a numbered contact sheet as `contact.jpg`. |
+| `--gentle` | Use half the CPU cores at low priority. |
+| `--threads N` | Set the number of threads used for image processing. |
+| `--only GLOB` | Process matching frames, e.g. `--only '0000[45]*'`. |
+| `--explain` | Report the scan problems detected in the roll, without writing images. |
+| `--audit` | Also report how the chosen profile handles those problems. |
+| `--overrides FILE` | Load per-frame settings from YAML, keyed by filename without its extension. |
+
+By default, image processing uses all CPU cores. Command-line settings override
+the profile. Run `bundle exec ./bin/emulsion --help` for the full list, including
+colour, contrast and grain controls.
 
 ## Output formats
 
-`--format` takes tiff, jpeg, png, heic or jp2, and `--bits` sets the depth
-where the format carries one. A correction stretches levels a long way, so
-eight bit output is dithered first and a stretched sky keeps its gradient
-instead of banding.
+Use `--format` to choose `tiff`, `jpeg`, `png`, `heic` or `jp2`:
 
-Measured on one 6144x4096 frame, against the same frame written at 16 bits:
-
-| Format | Size | Against the 16 bit render |
-| --- | --- | --- |
-| TIFF, 16 bit | 124 MB | lossless |
-| JPEG 2000, 16 bit, lossless | 81 MB | lossless |
-| HEIC, 8 bit, quality 100 | 43 MB | 53.0 dB |
-| TIFF, 8 bit | 34 MB | 53.0 dB |
-| HEIC, 8 bit, quality 95 | 17 MB | 49.3 dB |
-| JPEG, quality 98 | 15 MB | 46.3 dB |
-| JPEG, quality 95 | 10 MB | 43.1 dB |
-
-53.0 dB is the ceiling for anything 8 bit, since that is what rounding to 8
-bits costs on its own. HEIC gives the most picture for the size and opens
-everywhere on Apple platforms, which makes it a good home for finished
-frames, while 16 bit TIFF earns its size only for frames headed back into an
-editor. Quality 95 and 100 ask this HEVC encoder for the same file, so
-quality 100 is read as lossless, which is the only step up it offers.
-
-HEIC takes 8 bits by default even though the format allows more, since this
-libheif's encoder writes 10 and 12 bit files that measure worse than its 8
-bit ones (39.5 dB at 12 bits against 50.1 dB at 8). Its decoder also cannot
-read a full size HEIC back, though macOS opens the same files, so
-`--previews` is the easy way to get something to look through after a run.
-
-`bundle exec rake` runs the tests.
-
-## Correcting toward a reference film
-
-Some films are corrected by comparison with another film that the lab scans
-properly. The toolkit measures what neutral surfaces look like at each
-brightness and bends each channel until they match how the reference film
-renders them, in three layers:
-
-- the film's own cast, measured once from several of its rolls and kept in
-  its profile, so a roll that happens to be all warm sandstone or all blue
-  sky cannot pass its scenery off as a cast;
-- how far each roll's lab session drifted from that, up to about a stop;
-- how far the lab's balance drifted on each frame, fitted as a gentle shift
-  and tilt across the tones, and held back further on films whose frames
-  hardly drift, so a frame full of leaves is not read as a green cast.
-
-Stretching a frame's black and white points multiplies whatever tint is left
-in it, so a balance that lands on the reference at this stage lands warm in
-the finished picture. The roll's balance is therefore checked through the
-whole correction on a few frames and nudged until the greys come out right at
-the end.
-
-Where a film's tones come back bunched together, each roll's tones are also
-bent toward where the reference film's fall.
-
-The reference in `references/fujifilm-superia.yml` was measured from seven
-rolls of Superia 200 and 400, shot in the same places and light as the rolls
-the Phoenix and Lucky profiles were built from. To measure a reference of
-your own from rolls a lab scanned well:
-
-```bash
-bundle exec ruby tools/measure_reference.rb my-film "My Film 400" ~/scans/roll1 ~/scans/roll2
+```sh
+bundle exec ./bin/emulsion --profile lucky-shd-400 \
+  --format tiff --bits 16 ~/scans/my-roll
 ```
 
-Then name it in a profile with `reference: my-film`, or pass
-`--reference my-film` on the command line. To measure a film's own cast into
-its profile, from as many and as varied rolls as you have:
+TIFF, PNG and JPEG 2000 default to 16 bits per channel; JPEG and HEIC default
+to 8. Use `--bits` to change the depth where the format supports it. Eight-bit
+output is dithered to reduce banding in gradients.
 
-```bash
-bundle exec ruby tools/measure_film.rb lucky-shd-400 ~/scans/roll1 ~/scans/roll2 ~/scans/roll3
+`--quality` defaults to 98. Setting it to 100 produces lossless HEIC or JPEG
+2000 output. Support for these formats depends on your libvips build.
+
+HEIC defaults to 8 bits because higher depths gave worse results with the
+tested encoder. If your libvips build can't read the resulting HEIC files back,
+`--previews` gives you JPEGs to browse.
+
+## Extra fixes
+
+The film profiles handle colour and tone. Use `--fix` to also crop scan borders,
+recover shadows and highlights, or sharpen soft frames:
+
+```sh
+bundle exec ./bin/emulsion --profile lucky-shd-400 \
+  --fix crop,shadows ~/scans/my-roll
 ```
 
-## Past what a gain can reach
+`--fix` on its own enables the default set. `--fix all` enables every available
+fix, or you can pass a comma-separated list:
 
-Gains land greys on the reference, since greys are what they are measured on.
-Where a channel is exhausted they cannot help: Lucky's sunlit stone records
-almost no blue, and the gain that would fix the stone would turn every grey in
-the frame blue. These settings deal with what is left, each off unless a
-profile or the command line asks.
+| Fix | What it does |
+| --- | --- |
+| `crop` | Trim scanner overscan and film borders. |
+| `floor` | Use the film border to estimate the frame's black level. |
+| `flat` | Lift dark corners. Also needs a nonzero `--flat-field` setting. |
+| `shadows` | Recover shadow and highlight detail where possible. |
+| `sharpen` | Sharpen frames that measure as soft. |
+| `grain` | Adjust colour noise reduction to the frame's measured grain. |
 
-- `--chroma-shape` bends the film's colour onto the reference's, through the
-  channels that still work. `tools/measure_shape.rb PROFILE --reference
-  REF_DIR ROLL_DIR` fits the map into the profile.
-- `--lost-colour` eases the pixels whose blue has fallen furthest toward grey,
-  never all the way, so a blue sky in the same frame keeps its colour.
-- `--highlight-headroom` darkens a pixel a gain would push past white rather
-  than letting it clip, which is what left Lucky's skies pale cyan.
-- `--sky-floor` brings a sky that came out warmer than neutral back to it, and
-  never past it. Measured on Superia, a daylight sky is never warmer than
-  neutral.
+`crop` and `floor` need visible film borders. If the lab already cropped them
+off, these fixes are skipped. Corner correction is disabled in all bundled
+profiles because it can add coloured halos to skies.
 
-## Beyond the film
+## Supported films
 
-Everything above is about the film and the profile it was scanned with. Some
-of what is wrong with a scan is not: the camera's corners are dark, the
-scanner left its borders in the file, the frame holds more at each end than
-the range it was given. Those corrections are off unless `--fix` asks for
-them, so the film profiles stay purely about emulsion.
+The examples below show the original scan on the left and the corrected version
+on the right.
 
-```bash
-./bin/emulsion --profile lucky-shd-400 --fix ~/scans/"49602 Lucky SHD 400"
-```
+### LomoChrome Color '92 (`lomochrome-color-92`)
 
-A bare `--fix` turns on the usual set, `--fix all` turns on everything, and
-`--fix crop,shadows` names the ones you want.
-
-- `crop` trims the scanner's overscan and the film rebate around the picture.
-- `floor` reads each frame's black floor off that rebate. It is the scanner's
-  own rendering of unexposed film, which beats guessing the floor from the
-  picture, and it follows the lab's balance as it drifts from frame to frame.
-- `flat` measures how much light the corners lose, across the whole roll so
-  the subjects cancel out, and gives it back. It needs `flat_field` in the
-  profile as well, and none of the films here set it: measured on rolls of
-  sky and dark ground the subjects do not cancel, and the lift paints a
-  coloured halo across a clear sky.
-- `shadows` opens crushed shadows and pulls back held highlights, by as much
-  as each frame has to give, and estimates channels that clipped at white
-  from the ones that survived.
-- `sharpen` and `grain` work from how sharp and how grainy each frame
-  measures against its own grain floor.
-
-Both `crop` and `floor` need the film's own edges in the scan. A lab that
-crops to the picture leaves none, in which case both stand aside and the
-black floor is measured from the frames as before.
-
-## Film stocks
-
-### [LomoChrome Color '92](https://shop.lomography.com/eu/lomochrome-color-92-35-mm-iso-400) (`lomochrome-color-92`)
-
-An ISO 400 colour negative film from Lomography, with heavy grain and a
-desaturated, vintage colour look. Scans of it come back yellow shifted and
-chroma compressed: the colour is squeezed toward grey, the shadows go yellow,
-skies turn purple and foliage olive, even though the whites stay neutral. They
-are also flat, with the blacks lifted to a dark grey and the whites held back,
-and the grain carries a magenta speckle.
+Corrects colour casts, weak saturation, flat contrast and magenta colour noise.
 
 ![Before and after](examples/000065-before-after.jpg)
 
@@ -186,38 +119,79 @@ and the grain carries a magenta speckle.
 
 ![Bridge before and after](examples/000589220012-before-after.jpg)
 
-*Before, after. Same frames.*
-
 ### Harman Phoenix I 200 (`harman-phoenix-200`)
 
-Harman's ISO 200 colour negative film, grainy and contrasty, with strong
-halation. Scans of it come back with a teal floor under the shadows: green
-and blue sit 20 to 35 levels above black while red is clipped, so every
-shadow goes green. The highlights tip pink and come back bunched near white,
-with the midtones pushed up to meet them, so frames look washed out even once
-their black and white points are stretched. The profile balances each roll
-toward Superia and gives it Superia's tonal spread.
+Corrects green shadows, pink highlights and washed-out tones, using Fujifilm
+Superia as a reference for colour balance and contrast.
 
 ![Lausanne cathedral before and after](examples/000053-before-after.jpg)
 
 ![Zurich square before and after](examples/000041-before-after.jpg)
 
-*Before, after. Same frames.*
-
 ### Lucky SHD 400 (`lucky-shd-400`)
 
-Lucky's ISO 400 colour negative film. Scans of it look shot through a yellow
-filter: blue sags two to three stops behind green through the upper midtones
-while the whites stay clean, and red rides a little high, so pale blues and
-cyans turn yellow.
+Corrects the strong yellow cast caused by weak blue midtones, with extra colour
+correction for warm subjects and bright skies.
 
 ![Geneva cathedral before and after](examples/000051-before-after.jpg)
 
 ![Limmat before and after](examples/000070-before-after.jpg)
 
-*Before, after. Same frames.*
+## Custom profiles
+
+Profiles are YAML files in [profiles/](profiles/). To try another film, copy an
+existing profile, adjust its settings and pass the file path:
+
+```sh
+bundle exec ./bin/emulsion --profile ./my-film.yml ~/scans/my-roll
+```
+
+The bundled profiles use [Fujifilm Superia](references/fujifilm-superia.yml) as
+a reference, measured from seven rolls of Superia 200 and 400. The toolkit
+compares neutral colours at different brightness levels, corrects the film's
+measured cast, then adjusts for differences between rolls and individual frames.
+Profiles can also use the reference's tonal distribution to adjust contrast.
+
+<details>
+<summary>Measuring a reference or film profile</summary>
+
+To make a reference from rolls that your lab scans well:
+
+```sh
+bundle exec ruby tools/measure_reference.rb my-film "My Film 400" \
+  ~/scans/reference-roll1 ~/scans/reference-roll2
+```
+
+This writes `references/my-film.yml`. Set `reference: my-film` in a profile, or
+pass `--reference my-film` when running the toolkit.
+
+To measure a film's colour cast, use several rolls with varied subjects:
+
+```sh
+bundle exec ruby tools/measure_film.rb lucky-shd-400 \
+  ~/scans/roll1 ~/scans/roll2 ~/scans/roll3
+```
+
+This updates `film_gains` in the profile. To measure colour differences that
+remain after that correction:
+
+```sh
+bundle exec ruby tools/measure_shape.rb lucky-shd-400 \
+  --reference ~/scans/superia-roll ~/scans/lucky-roll
+```
+
+This updates `chroma_map` in the profile; `chroma_shape` controls its strength.
+Both measurement tools edit the profile in `profiles/`.
+
+</details>
+
+## Tests
+
+```sh
+bundle exec rake
+```
 
 ## Licence
 
-[PolyForm Noncommercial 1.0.0](LICENSE.md): free to use, change and share for
-non-commercial purposes, but not for commercial use.
+[PolyForm Noncommercial 1.0.0](LICENSE.md). Free to use, modify and share for
+non-commercial purposes.
