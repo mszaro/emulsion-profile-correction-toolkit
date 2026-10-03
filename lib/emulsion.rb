@@ -52,6 +52,7 @@ module Emulsion
     frame_balance_limit: 2.5,
     lamp_guard: 1.0,
     keep_warmth: 0.0,
+    frame_tint_limit: nil,
     roll_tone: 0.0,
     fix: [],
     # Off unless a profile asks: the falloff is measured across a roll, and a

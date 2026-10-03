@@ -52,6 +52,21 @@ module Emulsion
       tilt_of(at_work_size(srgb), target)
     end
 
+    # Across that path, from green toward magenta.
+    TINT = [-AXIS[1], AXIS[0]].freeze
+
+    # The fit with its move toward magenta held to `limit` stops at every tone.
+    # A frame of leaves reads to the fit as a green cast: on Lucky it moved a
+    # park more than a stop toward magenta, where 95% of the film's frames
+    # move under half a stop.
+    def cap_tint(fit, limit)
+      gains = fit.gains.map do |r, g, b|
+        over = [(r - g) * TINT[0] + (b - g) * TINT[1] - limit, 0.0].max
+        [r - over * TINT[0], g, b - over * TINT[1]]
+      end
+      ColourBalance.new(fit.offsets, gains)
+    end
+
     # The fit with `share` of its move toward daylight taken off at every
     # tone, and its tint left as it was. A tone the fit warms is left alone:
     # on LomoChrome's daylight frames the fit warms blue shade, and nothing

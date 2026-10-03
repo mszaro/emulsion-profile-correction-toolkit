@@ -52,9 +52,14 @@ lost_colour: 0.3
 # the colour the gains asked for survives.
 highlight_headroom: 1.5
 
+# A sky may not come out warmer than neutral, as on the other films.
+sky_floor: 0.75
+
 # Then each frame on its own, since the lab balanced every frame differently,
-# some by two stops or more.
-frame_balance: 0.7
+# some by two stops or more. A frame of leaves reads to the fit as a green
+# cast, so how far it may move a frame toward magenta is capped.
+frame_balance: 0.57
+frame_tint_limit: 0.4
 frame_balance_limit: 2.5
 
 # Tones come back a little bunched toward the highlights.

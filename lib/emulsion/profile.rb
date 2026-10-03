@@ -13,7 +13,7 @@ module Emulsion
                   roll_balance_limit film_gains frame_balance frame_balance_limit
                   roll_tone lost_colour chroma_map chroma_shape
                   highlight_headroom sky_neutral sky_floor flat_field healthy_spread
-                  sky_headroom measured_frame_balance lamp_guard keep_warmth sharpness].freeze
+                  sky_headroom measured_frame_balance lamp_guard keep_warmth sharpness frame_tint_limit].freeze
 
     attr_reader :id, :name, :settings, :healthy_spread
 

@@ -126,6 +126,24 @@ class WarmLightTest < Minitest::Test
     assert_equal fit.gains, Emulsion::WarmLight.hold(fit, 1.0).gains
   end
 
+  # A frame of leaves reads to the fit as a green cast, and its move toward
+  # magenta is capped. The move along the daylight axis is left as it was,
+  # and so is a move toward green.
+  def test_the_move_toward_magenta_is_capped
+  axis = Emulsion::WarmLight::AXIS
+  tint = Emulsion::WarmLight::TINT
+  gains = [[1.0, -0.3], [-0.5, 0.2]].map do |along_tint, along_axis|
+    move = (0..1).map { |c| along_tint * tint[c] + along_axis * axis[c] }
+    [move[0], 0.0, move[1]]
+  end
+  capped = Emulsion::WarmLight.cap_tint(Emulsion::ColourBalance.new([0.0, 0.0, 0.0], gains), 0.4).gains
+  project = ->(g, dir) { g[0] * dir[0] + g[2] * dir[1] }
+  assert_in_delta 0.4, project.(capped[0], tint), 1e-9
+  assert_in_delta(-0.3, project.(capped[0], axis), 1e-9)
+  assert_in_delta(-0.5, project.(capped[1], tint), 1e-9)
+  assert_in_delta 0.2, project.(capped[1], axis), 1e-9
+  end
+
   # Golden hour in sunlight cannot be found, so a frame's override asks for
   # its warmth to be kept.
   def test_keep_warmth_leaves_a_share_of_a_warm_cast

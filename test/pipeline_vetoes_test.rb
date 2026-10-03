@@ -36,6 +36,25 @@ class PipelineVetoesTest < Minitest::Test
   def test_the_profile_headroom_wins_when_it_is_larger
     assert_equal 2.0, pipeline(highlight_headroom: 2.0, sky_headroom: 1.5).send(:headroom_for, sky_frame)
   end
+
+  # An overcast sky sits near white. The frame balance adds blue to a frame
+  # the lab left yellow, and darkening the sky to make room for that blue
+  # turned it into a grey-lilac slab, so the frame balance gets no headroom.
+  def test_the_frame_balance_does_not_darken_a_white_sky
+  frame = TestImages.linear_image(200, 150) do |x, y|
+    next [0.80, 0.80, 0.80] if y < 40
+
+    level = [0.01, 0.03, 0.08, 0.2, 0.45][((x / 10) + (y / 10)) % 5]
+    [level, level, level * 2**-0.8]
+  end
+  reference = Emulsion::Reference.load("fujifilm-superia")
+  options = Emulsion::DEFAULTS.merge(reference: "fujifilm-superia", frame_balance: 1.0,
+                                     frame_balance_limit: 2.5, highlight_headroom: 1.5)
+  balanced = Emulsion::Pipeline.new(options, reference: reference).send(:balance, frame)
+  sky = ->(im) { TestImages.mean_pixel(im, 20, 5, 160, 30).zip(Emulsion::Pipeline::LUMA).sum { |v, w| v * w } }
+  assert_operator sky.(balanced), :>=, sky.(frame) - 0.01, "the sky should keep its brightness"
+  end
+
   # A dark interior with one lit window: too little of it for the frame fit to
   # read, and so no ground for inferring lost colour either. The window keeps
   # its amber.

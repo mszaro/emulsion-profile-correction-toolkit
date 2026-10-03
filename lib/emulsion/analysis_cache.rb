@@ -14,7 +14,8 @@ module Emulsion
     VERSION = 4
 
     SOURCES = %w[gamut_fit.rb roll_sample.rb colour_balance.rb tone_curve.rb flat_field.rb
-                 frame_edges.rb warm_light.rb].freeze
+                 frame_edges.rb warm_light.rb
+                 pipeline.rb dynamics.rb].freeze
 
     # Inputs is a hash of whatever else the fits were made from.
     def key(paths, inputs)

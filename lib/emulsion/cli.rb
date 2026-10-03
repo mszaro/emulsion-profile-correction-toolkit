@@ -147,6 +147,7 @@ module Emulsion
                                    highlight_headroom: options[:highlight_headroom],
                                    sky_headroom: options[:sky_headroom],
                                    frame_balance: options[:frame_balance],
+                                   frame_tint_limit: options[:frame_tint_limit],
                                    sky_neutral: options[:sky_neutral],
                                    sky_floor: options[:sky_floor],
                                    fix: options[:fix].sort)

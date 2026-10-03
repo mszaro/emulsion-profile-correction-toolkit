@@ -80,6 +80,12 @@ module Emulsion
     # Too little clipping to be worth reconstructing.
     MIN_CLIPPED = 0.0005
 
+    # Where the scanner itself ran out, as a share of its range. A pale sky the
+    # scan holds at 245 is bright, not clipped, and rebuilding it once the
+    # correction had carried it near white borrowed colour from neighbours that
+    # were being rebuilt too, until the whole sky came out pink.
+    SCANNER_CLIP = [251.0 / 255, 254.5 / 255].freeze
+
     # The neighbourhood a clipped pixel borrows its colour from, how far the
     # count leans toward the neighbours nearest to clipping themselves, and how
     # much of the frame's own average stands behind the lot.
@@ -137,11 +143,19 @@ module Emulsion
 
     # A corrected copy, at `amount` of full strength. A frame with nothing to
     # recover, and any frame at all at zero strength, comes back as it went in.
-    def apply(image, measurement, amount)
+    # `lost`, from scanner_clipping, confines the reconstruction to what the
+    # scanner clipped; without it any pixel near white counts.
+    def apply(image, measurement, amount, lost: nil)
       return image if measurement.nil? || amount <= 0 || measurement.quiet?
 
-      out = reconstruct(image, measurement, amount)
+      out = reconstruct(image, measurement, amount, lost)
       tone_map(out, measurement, amount).copy(interpretation: :srgb)
+    end
+
+    # How far each pixel of a scan, as it came from the scanner, ran into the
+    # top of its range, from 0 to 1.
+    def scanner_clipping(scan)
+      smoothstep(peak(bands_of(scan)), *SCANNER_CLIP)
     end
 
     # How much of the frame sits between the ends of a span.
@@ -223,12 +237,13 @@ module Emulsion
     # survived, in the proportions its unclipped neighbours have, and faded in
     # across the clipping threshold so nothing marks where it starts. Pixels
     # with all three channels gone are left white.
-    def reconstruct(image, measurement, amount)
+    def reconstruct(image, measurement, amount, lost = nil)
       return image if measurement.clipped < MIN_CLIPPED
 
       here = bands_of(image)
       near = bands_of(neighbour_colour(image))
       clip = here.map { |c| smoothstep(c, CLIP_LOW, CLIP_HIGH) * amount }
+      clip = clip.map { |c| c * lost } if lost
       keep = clip.map { |c| c.linear(-1, 1) }
 
       # How far the surviving channels sit above the colour the neighbours

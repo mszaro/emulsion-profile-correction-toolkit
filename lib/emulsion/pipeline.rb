@@ -40,12 +40,14 @@ module Emulsion
       return scan unless frame_balance?
 
       frame = frame_fit(scan)
-      frame && with_headroom(frame, scan).apply(scan)
+      frame&.apply(scan)
     end
 
     # The correction on a loaded frame, a float sRGB image in 0..1.
     def render(scan)
-      srgb_in = settled(apply_roll_fit(balance(trim(scan))))
+      scan = trim(scan)
+      @lost = lost_in(scan)
+      srgb_in = settled(apply_roll_fit(balance(scan)))
 
       # Colour is measured and corrected in linear light, where a gain is what
       # it claims to be. Tone work happens later, in display space.
@@ -118,10 +120,21 @@ module Emulsion
     def recover(srgb)
       return srgb unless fix?(:shadows)
 
-      measured = Dynamics.measure(srgb)
+      measured = Dynamics.measure(srgb).dup
       held = 1.0 - Diagnosis.crushed(srgb) * (1.0 - CRUSHED_SHADOW_KEEP)
-      measured = measured.dup.tap { |m| m.shadow_room *= held } if held < 1.0
-      Dynamics.apply(srgb, measured, @o[:recovery])
+      measured.shadow_room *= held if held < 1.0
+      lost = @lost && @lost / 255.0
+      # Clipping is read from the scan. By here the correction has carried
+      # pale skies near white, and they would count as clipped.
+      measured.clipped = lost.avg if lost
+      Dynamics.apply(srgb, measured, @o[:recovery], lost: lost)
+    end
+
+    # Where the scanner clipped, kept small as eight bits, for the recovery.
+    def lost_in(scan)
+      return nil unless fix?(:shadows)
+
+      settled((Dynamics.scanner_clipping(scan) * 255.0).cast(:uchar))
     end
 
     # How much of the shadow lift a frame with a crushed channel keeps. The
@@ -155,7 +168,9 @@ module Emulsion
       # dark interior it reads backlit amber glass as stone with no blue left.
       return scan unless frame
 
-      shape(with_headroom(frame, scan).apply(scan))
+      # Without headroom: the frame's correction is small, and darkening a near
+      # white pixel to fit it turned an overcast sky into a grey-lilac slab.
+      shape(frame.apply(scan))
     end
 
     def frame_balance?
@@ -168,6 +183,8 @@ module Emulsion
       return nil unless frame
 
       frame = keep_warmth(frame, scan)
+      limit = @o[:frame_tint_limit]
+      frame = WarmLight.cap_tint(frame, limit / @o[:frame_balance]) if limit
       frame.strength = @o[:frame_balance]
       frame
     end
