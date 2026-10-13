@@ -30,8 +30,14 @@ module FilmScan
 
     # Lab pixels, as [[L, a, b], ...], for the corrected roll and for the
     # rolls it matches.
+    # Lightness is matched over the whole picture. Colour leaves out pixels
+    # marked as sky: the detector finds a clear blue sky far more readily
+    # than a pale one, so leaving skies out of the lightness too would drop
+    # one roll's bright end and not the other's.
     def self.fit(film, target)
       lightness = quantiles(film.map(&:first)).zip(quantiles(target.map(&:first)))
+      film = film.reject { |px| sky?(px) }
+      target = target.reject { |px| sky?(px) }
       spread = (chroma_spread(target) / [chroma_spread(film), 1e-6].max).clamp(*SPREAD_LIMIT)
       offsets = BANDS.map do |centre|
         from = in_band(film, centre)
@@ -49,15 +55,18 @@ module FilmScan
 
     # Lab pixels from a float sRGB image, about count of them, and fewer from
     # a frame dark enough that the match mostly leaves it alone. Pixels the
-    # skip mask marks, a sky, are left out: a clear blue sky over one roll and
-    # a pale one over the other say nothing about how either film renders.
-    def self.pixels(srgb, count = PER_FRAME, weighted: true, skip: nil)
+    # sky mask marks carry a fourth value of 1, so the fit can leave them out
+    # of the colour: a clear blue sky over one roll and a pale one over the
+    # other say nothing about how either film renders.
+    def self.pixels(srgb, count = PER_FRAME, weighted: true, sky: nil)
       scale = Math.sqrt(count.to_f / (srgb.width * srgb.height))
       small = scale < 1.0 ? srgb.resize(scale) : srgb
       lab = lab_of(small)
-      lab = lab.bandjoin((scale < 1.0 ? skip.resize(scale) : skip).cast(:float)) if skip
-      pixels = lab.write_to_memory.unpack("f*").each_slice(skip ? 4 : 3).to_a
-      pixels = pixels.reject { |px| px[3] > SKY }.map { |px| px.first(3) } if skip
+      if sky
+        marked = ((scale < 1.0 ? sky.resize(scale) : sky) > SKY).ifthenelse(1.0, 0.0)
+        lab = lab.bandjoin(marked.cast(:float))
+      end
+      pixels = lab.write_to_memory.unpack("f*").each_slice(sky ? 4 : 3).to_a
       return pixels unless weighted
 
       keep = (pixels.size * key_weight(median_of(pixels))).round
@@ -68,6 +77,10 @@ module FilmScan
     def self.key_weight(median)
       t = ((median - LOW_KEY[0]) / (LOW_KEY[1] - LOW_KEY[0])).clamp(0.0, 1.0)
       t * t * (3 - 2 * t)
+    end
+
+    def self.sky?(pixel)
+      pixel.size > 3 && pixel[3] > 0.5
     end
 
     def self.median_of(pixels)

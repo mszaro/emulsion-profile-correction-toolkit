@@ -63,14 +63,19 @@ class LookMatchTest < Minitest::Test
     assert_equal 0.0, (look.apply(frame) - frame).abs.max
   end
 
-  # A sky says nothing about how either film renders, so the pixels the sky
-  # mask marks are left out of the fit.
-  def test_leaves_out_what_the_skip_mask_marks
-    frame = srgb_from(Array.new(300) { [80.0, -5.0, -30.0] } + Array.new(300) { [50.0, 0.0, 12.0] })
-    sky = Vips::Image.black(100, 6).draw_rect(1.0, 0, 0, 100, 3, fill: true).cast(:float)
-    kept = FilmScan::LookMatch.pixels(frame, 600, weighted: false, skip: sky)
-    assert_equal 300, kept.size
-    assert(kept.all? { |l, _, _| (l - 50).abs < 1 }, "only the ground should be left")
+  # A sky says nothing about how either film renders, so its colour is left
+  # out of the fit, but its lightness still counts.
+  def test_sky_counts_for_lightness_but_not_for_colour
+    rng = Random.new(3)
+    ground = ->(yellow) { Array.new(1200) { [50.0 + rng.rand * 10, rng.rand * 8 - 4, yellow + rng.rand * 8 - 4] } }
+    frame = srgb_from(Array.new(1200) { [55.0 + rng.rand * 5, -5.0, -40.0] } + ground.call(0.0))
+    sky = Vips::Image.black(100, 24).draw_rect(1.0, 0, 0, 100, 12, fill: true).cast(:float)
+    target = FilmScan::LookMatch.pixels(frame, 2400, weighted: false, sky: sky)
+    assert_equal 1200, target.count { |px| FilmScan::LookMatch.sky?(px) }
+
+    film = ground.call(10.0)
+    after = FilmScan::LookMatch.fit(film, target).apply(srgb_from(film))
+    assert_in_delta 0.0, mean_of(after, 2), 1.5, "the ground should match the ground, not the blue sky"
   end
 
   def test_survives_the_cache
