@@ -25,9 +25,21 @@ module FilmScan
       chosen
     end
 
+    # A bare --fix just before the folder would take the folder for its list,
+    # so the word after it only counts as a list when it names fixes.
+    def self.bare_fix(argv)
+      argv.each_with_index.map do |arg, i|
+        following = argv[i + 1]
+        names = following.to_s.downcase.split(",")
+        listed = !names.empty? && names.all? { |name| name == "all" || FIXES.include?(name.to_sym) }
+        arg == "--fix" && !listed ? "--fix=#{DEFAULT_FIXES.join(",")}" : arg
+      end
+    end
+
     def run(argv)
       flags = { previews: false }
       parser = build_parser(flags)
+      argv.replace(CLI.bare_fix(argv))
       parser.parse!(argv)
       share_the_machine(flags)
 
