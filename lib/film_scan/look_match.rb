@@ -19,6 +19,10 @@ module FilmScan
     SPREAD_LIMIT = [0.7, 1.6].freeze
     # Pixels read from a frame for the fit.
     PER_FRAME = 20_000
+    # A frame this dark at its median, in L*, is a dark scene rather than a
+    # dark rendering: a church interior or a night street keeps its own look.
+    # The match eases in between the two and is whole above the second.
+    LOW_KEY = [15.0, 35.0].freeze
 
     attr_reader :lightness, :offsets, :spread, :strength
 
@@ -37,11 +41,33 @@ module FilmScan
       new(lightness: lightness, offsets: fill(offsets), spread: spread)
     end
 
-    # Lab pixels from a float sRGB image, about PER_FRAME of them.
-    def self.pixels(srgb, count = PER_FRAME)
+    # Lab pixels from a float sRGB image, about count of them, and fewer from
+    # a frame dark enough that the match mostly leaves it alone.
+    def self.pixels(srgb, count = PER_FRAME, weighted: true)
       scale = Math.sqrt(count.to_f / (srgb.width * srgb.height))
       small = scale < 1.0 ? srgb.resize(scale) : srgb
-      lab_of(small).write_to_memory.unpack("f*").each_slice(3).to_a
+      pixels = lab_of(small).write_to_memory.unpack("f*").each_slice(3).to_a
+      return pixels unless weighted
+
+      keep = (pixels.size * key_weight(median_of(pixels))).round
+      keep.zero? ? [] : pixels.each_slice((pixels.size.to_f / keep).ceil).map(&:first)
+    end
+
+    # How much of the match a frame takes, by its median lightness.
+    def self.key_weight(median)
+      t = ((median - LOW_KEY[0]) / (LOW_KEY[1] - LOW_KEY[0])).clamp(0.0, 1.0)
+      t * t * (3 - 2 * t)
+    end
+
+    def self.median_of(pixels)
+      return 0.0 if pixels.empty?
+
+      pixels.map(&:first).sort[pixels.size / 2]
+    end
+
+    # A frame's median lightness, read from a small copy.
+    def self.key_of(srgb)
+      median_of(pixels(srgb, 4000, weighted: false))
     end
 
     def self.lab_of(srgb)
@@ -97,8 +123,11 @@ module FilmScan
       @tables = nil
     end
 
-    def apply(srgb)
-      return srgb if @strength <= 0
+    # The frame's key is read from picture, which is the frame without any
+    # border it was kept with.
+    def apply(srgb, picture = srgb)
+      strength = @strength * self.class.key_weight(self.class.key_of(picture))
+      return srgb if strength <= 0
 
       lab = self.class.lab_of(srgb)
       index = (lab[0] < 0).ifthenelse(0, (lab[0] > 99.999).ifthenelse(99.999, lab[0]))
@@ -107,7 +136,7 @@ module FilmScan
       below = low.cast(:uchar)
       above = (low + 1).cast(:uchar)
       read = ->(table) { below.maplut(table) * (frac * -1 + 1) + above.maplut(table) * frac }
-      light, weight, a_off, b_off = tables.map { |table| read.call(table) }
+      light, weight, a_off, b_off = tables(strength).map { |table| read.call(table) }
       moved = [lab[1], lab[2]].zip([a_off, b_off]).map do |channel, offset|
         channel + weight * (channel * (@spread - 1.0) + offset)
       end
@@ -125,7 +154,8 @@ module FilmScan
       median = @lightness[@lightness.size / 2]
       mid = @offsets[BANDS.index(55)]
       format("  matching the look: median lightness %.0f -> %.0f, midtone colour a* %+.1f b* %+.1f, " \
-             "colourfulness x%.2f, at %.0f%% strength", *median, *mid, @spread, @strength * 100)
+             "colourfulness x%.2f, at %.0f%% strength; frames darker than L* %.0f at their " \
+             "median keep their own look", *median, *mid, @spread, @strength * 100, LOW_KEY[0])
     end
 
     private
@@ -133,11 +163,11 @@ module FilmScan
     # Lookup tables over L* 0..100: the new lightness, how much of the colour
     # move each brightness takes, and the colour offsets, all with the
     # strength already in them.
-    def tables
-      @tables ||= begin
+    def tables(strength)
+      (@tables ||= {})[strength.round(3)] ||= begin
         steps = (0..100).map(&:to_f)
-        light = steps.map { |x| x + (lightness_at(x) - x) * @strength }
-        weight = steps.map { |x| shadow_weight(x) * @strength }
+        light = steps.map { |x| x + (lightness_at(x) - x) * strength }
+        weight = steps.map { |x| shadow_weight(x) * strength }
         offset = (0..1).map { |c| steps.map { |x| offset_at(x, c) } }
         [light, weight, *offset].map { |values| Vips::Image.new_from_array([values]).cast(:float) }
       end

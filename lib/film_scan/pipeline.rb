@@ -84,7 +84,11 @@ module FilmScan
       srgb = fix?(:sharpen) ? Detail.sharpen(srgb, detail, @o[:sharpness]) : srgb
       # Last, on the finished frame, since it is the finished look of the
       # matched rolls it was measured against.
-      srgb = @look.apply(srgb) if @look
+      # Settled first, since the frame is read for its key and then changed.
+      if @look
+        srgb = settled(srgb)
+        srgb = @look.apply(srgb, inside(srgb))
+      end
       # Again at the end: the tone curve, the contrast and the recovery all
       # push pixels back over the top after the stretch has fitted them.
       Gamut.fit(srgb, headroom_for(nil))

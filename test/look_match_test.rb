@@ -44,13 +44,23 @@ class LookMatchTest < Minitest::Test
     assert_equal 0.0, (look.apply(frame) - frame).abs.max
   end
 
-  # A dark interior has nothing to learn from sunlit streets, so its colour
-  # stays where it was however the rest of the roll moves.
+  # The shadows of an ordinary frame keep their colour however the rest of
+  # the frame moves.
   def test_deep_shadows_keep_their_colour
     look = FilmScan::LookMatch.fit(lab_pixels(0, 12), lab_pixels(0, -4, seed: 2))
-    dark = srgb_from(Array.new(600) { [8.0, 0.0, 10.0] })
-    shifted = FilmScan::LookMatch.pixels(look.apply(dark), 600)
-    assert_in_delta 10.0, shifted.sum { |px| px[2] } / shifted.size, 1.0
+    frame = srgb_from(Array.new(500) { [50.0, 0.0, 12.0] } + Array.new(100) { [8.0, 0.0, 10.0] })
+    after = look.apply(frame)
+    shadows = FilmScan::LookMatch.pixels(after.extract_area(0, 5, 100, 1), 100, weighted: false)
+    assert_in_delta 10.0, shadows.sum { |px| px[2] } / shadows.size, 1.0
+    assert_operator mean_of(after, 2), :<, 4.0, "the midtones should still move"
+  end
+
+  # A dark scene, such as a church interior with lit windows, keeps its own
+  # look entirely: lifting it would only grey the dark and blow the windows.
+  def test_a_very_dark_frame_keeps_its_own_look
+    look = FilmScan::LookMatch.fit(lab_pixels(-10, 12), lab_pixels(5, -3, seed: 2))
+    frame = srgb_from(Array.new(540) { [6.0, 2.0, 4.0] } + Array.new(60) { [70.0, 10.0, 30.0] })
+    assert_equal 0.0, (look.apply(frame) - frame).abs.max
   end
 
   def test_survives_the_cache
