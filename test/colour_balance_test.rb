@@ -208,4 +208,15 @@ class ColourBalanceTest < Minitest::Test
     assert_in_delta 0.4, slope, 0.02
     assert_in_delta(-1.0, intercept, 0.05)
   end
+
+  # Every luma lands in the nearest band, and below and above the ends in the
+  # first and last.
+  def test_tone_index_picks_the_nearest_band
+    logs = FilmScan::ColourBalance::LOG_TONES
+    [0.0, 1e-7, 0.001, 0.005, 0.0049, 0.03, 0.15, 0.55, 0.7, 0.99, 1.0].each do |y|
+      l = Math.log([y, 1e-6].max)
+      nearest = logs.each_index.min_by { |i| (logs[i] - l).abs }
+      assert_equal nearest, FilmScan::ColourBalance.tone_index(y), "luma #{y}"
+    end
+  end
 end

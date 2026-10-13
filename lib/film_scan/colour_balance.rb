@@ -210,8 +210,16 @@ module FilmScan
       factor = Math.sqrt(inner.width * inner.height / FRAME_PIXELS.to_f).floor
       factor = factor > 1 ? factor : 1
       inner = inner.subsample(factor, factor) if factor > 1
-      pixels = inner.cast(:float).write_to_memory.unpack("f*").each_slice(inner.bands).map do |px|
-        px.first(3).map { |v| Colour.srgb_to_linear_scalar(v.clamp(0.0, 1.0)) }
+      # Plain index loops, since this runs over every sampled pixel.
+      raw = inner.cast(:float).write_to_memory.unpack("f*")
+      bands = inner.bands
+      pixels = Array.new(raw.size / bands)
+      at = 0
+      pixels.each_index do |i|
+        pixels[i] = [Colour.srgb_to_linear_scalar(raw[at].clamp(0.0, 1.0)),
+                     Colour.srgb_to_linear_scalar(raw[at + 1].clamp(0.0, 1.0)),
+                     Colour.srgb_to_linear_scalar(raw[at + 2].clamp(0.0, 1.0))]
+        at += bands
       end
       return pixels unless skip
 
@@ -239,10 +247,18 @@ module FilmScan
     # greys rather than on whatever fills the band, such as sky or foliage.
     def self.measure_bands(pixels, minimum, from: nil)
       groups = Array.new(TONES.size) { [] }
-      pixels.each do |px|
+      # A plain loop, since this runs over every pixel of a frame or a roll.
+      i = 0
+      n = pixels.size
+      while i < n
+        px = pixels[i]
+        i += 1
         next if px.min <= 1e-5 || px.max >= CLIPPED
 
-        groups[tone_index(luma(px))] << [Math.log2(px[0] / px[1]), Math.log2(px[2] / px[1])]
+        r = px[0]
+        g = px[1]
+        b = px[2]
+        groups[tone_index(LUMA[0] * r + LUMA[1] * g + LUMA[2] * b)] << [Math.log2(r / g), Math.log2(b / g)]
       end
       groups.each_with_index.map do |g, i|
         next nil if g.size < minimum
@@ -254,11 +270,30 @@ module FilmScan
 
     def self.centre_of(group, start, rounds)
       centre = start
+      n = group.size
       rounds.times do
-        dist = group.map { |r, b| (r - centre[0])**2 + (b - centre[1])**2 }
+        red = centre[0]
+        blue = centre[1]
+        dist = Array.new(n)
+        i = 0
+        while i < n
+          point = group[i]
+          dist[i] = (point[0] - red)**2 + (point[1] - blue)**2
+          i += 1
+        end
         cut = percentile(dist, NEAREST_PCT)
-        near = group.each_index.select { |i| dist[i] <= cut }
-        centre = [near.sum { |i| group[i][0] } / near.size, near.sum { |i| group[i][1] } / near.size]
+        # Summed with Array#sum, as before, so the rounding is the same.
+        reds = []
+        blues = []
+        i = 0
+        while i < n
+          if dist[i] <= cut
+            reds << group[i][0]
+            blues << group[i][1]
+          end
+          i += 1
+        end
+        centre = [reds.sum / reds.size, blues.sum / blues.size]
       end
       centre
     end
@@ -333,9 +368,21 @@ module FilmScan
       values.each_index.map { |i| values[measured.min_by { |j| (j - i).abs }] }
     end
 
+    # The nearest tone band, the first of two equally near, as min_by gave.
     def self.tone_index(y)
       l = Math.log([y, 1e-6].max)
-      LOG_TONES.each_index.min_by { |i| (LOG_TONES[i] - l).abs }
+      best = 0
+      gap = (LOG_TONES[0] - l).abs
+      i = 1
+      while i < LOG_TONES.size
+        d = (LOG_TONES[i] - l).abs
+        if d < gap
+          best = i
+          gap = d
+        end
+        i += 1
+      end
+      best
     end
 
     def self.luma(px)
@@ -343,7 +390,7 @@ module FilmScan
     end
 
     def self.percentile(values, pct)
-      Measurements.percentile(values.sort, pct)
+      Measurements.percentile_of(values, pct)
     end
 
     def initialize(offsets, gains)
@@ -384,9 +431,12 @@ module FilmScan
       return gains.last if y >= TONES.last
 
       l = Math.log(y)
-      hi = LOG_TONES.index { |t| t >= l }
+      hi = 0
+      hi += 1 while LOG_TONES[hi] < l
       t = (l - LOG_TONES[hi - 1]) / (LOG_TONES[hi] - LOG_TONES[hi - 1])
-      (0..2).map { |c| gains[hi - 1][c] * (1 - t) + gains[hi][c] * t }
+      below = gains[hi - 1]
+      above = gains[hi]
+      [below[0] * (1 - t) + above[0] * t, below[1] * (1 - t) + above[1] * t, below[2] * (1 - t) + above[2] * t]
     end
 
     # The correction on linear pixels without their floors, as the fit sees them.
@@ -394,7 +444,7 @@ module FilmScan
       gains = applied_gains
       pixels.map do |px|
         g = gain_at(self.class.luma(px), gains)
-        (0..2).map { |c| (px[c] * 2**g[c]).clamp(0.0, 1.0) }
+        [(px[0] * 2**g[0]).clamp(0.0, 1.0), (px[1] * 2**g[1]).clamp(0.0, 1.0), (px[2] * 2**g[2]).clamp(0.0, 1.0)]
       end
     end
 
