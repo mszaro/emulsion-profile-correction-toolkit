@@ -106,6 +106,7 @@ module FilmScan
       end
 
       puts "processing #{files.size} frames -> #{destination}"
+      writing = nil
       files.each_with_index do |path, i|
         name = File.basename(path)
         stem = File.basename(name, ".*")
@@ -115,15 +116,20 @@ module FilmScan
         # frame too. Shrinking the unrendered pipeline for either ran all of it
         # again, and on a 6144px frame that took 45GB.
         result = result.copy_memory if options[:previews] || sheet
-        written = write_result(result, destination, stem, path, options)
+        # heif-enc works on one frame while the next is corrected, so the last
+        # frame's file is finished before this one's is started.
+        writing&.value
+        writing = write_result(result, destination, stem, path, options) do |written|
+          puts "  [#{i + 1}/#{files.size}] #{name} -> #{File.basename(written)}"
+        end
         if options[:previews]
           jpeg = File.join(preview_dir, "#{stem}.jpg")
           (result * 255).cast(:uchar).thumbnail_image(1600, size: :down)
                         .jpegsave(jpeg, Q: 92)
         end
         sheet&.add(result, stem)
-        puts "  [#{i + 1}/#{files.size}] #{name} -> #{File.basename(written)}"
       end
+      writing&.value
 
       File.write(File.join(destination, "settings.yml"),
                  YAML.dump(options.transform_keys(&:to_s)))
@@ -131,6 +137,9 @@ module FilmScan
       puts "contact sheet -> #{File.basename(made)}" if made
       puts "done"
       0
+    ensure
+      # An encoder left running would write its file after the run had gone.
+      finish(writing)
     end
 
     private
@@ -394,25 +403,46 @@ module FilmScan
 
     # Written under a temporary name and renamed when complete, so an
     # interrupted run never leaves a truncated file that looks finished.
-    def write_result(result, destination, stem, source_path, options)
+    # Returns the thread that finishes the file, since heif-enc may still be
+    # encoding it, and that thread yields the path when the file is done.
+    def write_result(result, destination, stem, source_path, options, &done)
       format = output_format(source_path, options)
       path = File.join(destination, stem + FORMATS.fetch(format))
       partial = "#{path}.partial"
-      save(result, partial, format, options, orientation_of(source_path))
-      File.rename(partial, path)
-      path
-    ensure
+      encoding = save(result, partial, format, options, orientation_of(source_path), wait: false)
+      Thread.new do
+        Thread.current.report_on_exception = false
+        encoding&.value
+        File.rename(partial, path)
+        done&.call(path)
+        path
+      ensure
+        File.delete(partial) if File.exist?(partial)
+      end
+    rescue StandardError
       File.delete(partial) if partial && File.exist?(partial)
+      raise
     end
 
-    def save(result, partial, format, options, orientation)
+    # Waits for a file still being written, when the run is ending anyway.
+    def finish(writing)
+      writing&.join
+    rescue StandardError
+      nil
+    end
+
+    # Returns the thread running heif-enc when `wait` is false and there is one.
+    def save(result, partial, format, options, orientation, wait: true)
       bits = depth_for(format, options[:bits])
       quality = options[:quality]
       # A black and white frame is kept as one channel.
       result = result[0] if options[:monochrome]
       # A straight conversion is already whole numbers, and dither would only add noise.
       dither = !options[:convert_only]
-      return encode_heic(result, partial, bits, quality, orientation, dither) if format == "heic" && HEIF_ENC
+      if format == "heic" && HEIF_ENC
+        encoding = encode_heic(result, partial, bits, quality, orientation, dither)
+        return wait ? encoding.value : encoding
+      end
 
       case format
       # Chroma subsampling smears grain into coloured blocks, so it stays off
@@ -431,6 +461,7 @@ module FilmScan
       else
         quantise(result, bits, dither: dither).tiffsave(partial, compression: :deflate, predictor: :horizontal)
       end
+      nil
     end
 
     # libheif's own encoder, where it is installed. libvips gives the same file
@@ -440,6 +471,8 @@ module FilmScan
     HEIF_ENC = ENV.fetch("PATH", "").split(File::PATH_SEPARATOR).map { |dir| File.join(dir, "heif-enc") }
                   .find { |path| File.executable?(path) }
 
+    # The PNG is written here and heif-enc runs in the thread returned, which
+    # leaves the next frame free to start while this one encodes.
     def encode_heic(result, partial, bits, quality, orientation, dither = true)
       png = "#{partial}.png"
       heic = "#{partial}.heic"
@@ -458,13 +491,19 @@ module FilmScan
       # The encoder starts a thread per core of its own, so it follows --threads.
       args += ["-p", "x265:pools=#{Vips.concurrency}"]
       args += quality >= 100 ? ["-L"] : ["-p", "x265:qp=#{((100 - quality) * 0.51).round.clamp(0, 51)}"]
-      ok = system(*args, png, out: File::NULL, err: File::NULL)
-      raise "heif-enc could not write #{File.basename(heic)}" unless ok && File.exist?(heic)
+      Thread.new do
+        Thread.current.report_on_exception = false
+        ok = system(*args, png, out: File::NULL, err: File::NULL)
+        raise "heif-enc could not write #{File.basename(heic)}" unless ok && File.exist?(heic)
 
-      File.rename(heic, partial)
-    ensure
+        File.rename(heic, partial)
+      ensure
+        File.delete(png) if File.exist?(png)
+        File.delete(heic) if File.exist?(heic)
+      end
+    rescue StandardError
       File.delete(png) if png && File.exist?(png)
-      File.delete(heic) if heic && File.exist?(heic)
+      raise
     end
 
     # A frame as it was scanned, cropped to the picture when --crop asks.

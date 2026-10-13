@@ -59,6 +59,23 @@ class CLITest < Minitest::Test
     end
   end
 
+  # heif-enc runs beside the next frame, and the run still ends with every
+  # frame finished, in order, and nothing temporary left behind.
+  def test_a_heic_roll_finishes_every_frame
+    skip "heif-enc is not installed" unless FilmScan::CLI::HEIF_ENC
+    Dir.mktmpdir do |dir|
+      source = File.join(dir, "roll")
+      Dir.mkdir(source)
+      write_roll(source, frames: 3)
+      out_dir = File.join(dir, "out")
+      status, out = run_cli("--convert-only", "--format", "heic", "--out", out_dir, source)
+      assert_equal 0, status, out
+      assert_equal %w[000001.heic 000002.heic 000003.heic], Dir.children(out_dir).grep(/heic/).sort
+      assert_empty Dir.children(out_dir).grep(/partial|\.png/)
+      assert_equal %w[1 2 3], out.scan(%r{\[(\d)/3\]}).flatten
+    end
+  end
+
   # A bare --fix just before the folder takes the usual set, not the folder.
   def test_a_bare_fix_does_not_take_the_folder
     assert_equal ["--fix=#{FilmScan::DEFAULT_FIXES.join(",")}", "/scans/roll"], FilmScan::CLI.bare_fix(["--fix", "/scans/roll"])

@@ -111,6 +111,21 @@ class OutputFormatTest < Minitest::Test
     end
   end
 
+  # heif-enc runs on a thread of its own, and a failure there still reaches
+  # the run and takes the temporary files with it.
+  def test_a_failed_heic_encode_is_reported_and_cleaned_up
+    skip "heif-enc is not installed" unless FilmScan::CLI::HEIF_ENC
+    def @cli.system(*) = false
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "frame.heic.partial")
+      error = assert_raises(RuntimeError) do
+        @cli.send(:save, @frame, path, "heic", FilmScan::DEFAULTS.merge(bits: 10), 1)
+      end
+      assert_match(/heif-enc could not write/, error.message)
+      assert_empty Dir.children(dir)
+    end
+  end
+
   # The PNG the encoder reads carries no orientation, so a portrait frame is
   # turned upright before it is written.
   def test_a_portrait_frame_is_written_upright
