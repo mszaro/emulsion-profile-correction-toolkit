@@ -58,6 +58,7 @@ class MatchTest < Minitest::Test
         assert_equal 0, status, out
         assert_match(/measuring #{name} \(3 frames\) to match/, out)
         assert File.exist?(File.join(out_dir, "match-reference.yml"))
+        assert_match(/matching the look: median lightness/, out)
         [name, out_dir]
       end
       assert_operator coolness(outs["cool"]) - coolness(outs["warm"]), :>, 0.2
@@ -66,6 +67,7 @@ class MatchTest < Minitest::Test
                             "--format", "png", "--bits", "8", "--out", outs["cool"], File.join(dir, "roll"))
       assert_equal 0, status, out
       assert_match(/as measured before/, out)
+      refute_match(/measuring the look/, out, "the look should come from the cache")
     end
   end
 

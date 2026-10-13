@@ -154,7 +154,8 @@ module FilmScan
     # Settings the roll's fits never see: where and how frames are written,
     # and the strengths put on the raw fits after they are loaded.
     NOT_IN_FITS = %i[out only threads gentle previews contact_sheet format quality bits overrides
-                     explain audit convert_only crop profile roll_tone roll_fit flat_field].freeze
+                     explain audit convert_only crop profile roll_tone roll_fit flat_field
+                     match_strength].freeze
 
     MATCH_FILE = "match-reference.yml"
 
@@ -176,6 +177,7 @@ module FilmScan
         (found[File.basename(File.dirname(paths.first))] ||= []).concat(paths)
       end
       named = rolls.map { |roll, paths| "#{roll} (#{paths.size} frames)" }.join(" and ")
+      @match_rolls = rolls
       key = AnalysisCache.key(rolls.values.flatten, match: rolls.keys)
       path = File.join(destination, MATCH_FILE)
       if File.exist?(path)
@@ -191,7 +193,9 @@ module FilmScan
       FileUtils.mkdir_p(destination)
       comment = "Measured by --match from:\n" + rolls.map { |roll, paths| "  #{roll}, #{paths.size} frames" }.join("\n")
       File.write(path, "#{reference.to_yaml(comment)}\nkey: #{key}\n")
-      reference
+      # Read back rather than used as measured, so this run and the next see
+      # the same rounded values and the roll's analysis is reused.
+      Reference.load(path)
     end
 
     # The roll is fitted once, across every frame, before any frame is written:
@@ -271,9 +275,48 @@ module FilmScan
         AnalysisCache.save(destination, key, **fits) if fits[:tilt]
       end
       puts format("frames tilt %+.2f stops per e-fold from shadows to highlights", fits[:tilt]) if fits[:tilt]
+      if @match_rolls && !options[:monochrome]
+        fits[:look] = LookMatch.from_cache(cached[:look]) if cached[:look]
+        unless fits[:look]
+          puts "measuring the look to match..."
+          fits[:look] = match_look(all, options, fits, reference)
+          AnalysisCache.save(destination, key, **fits)
+        end
+        fits[:look].strength = options[:match_strength]
+        puts fits[:look].report
+      end
       fits.compact
     ensure
       @tuned = nil
+    end
+
+    # Frames read from each roll for the look, spread through it.
+    LOOK_FRAMES = 12
+
+    # The corrected roll's finished look against the look of the rolls it
+    # matches, each read inside the picture. Every matched roll counts the
+    # same, however many frames it has.
+    def match_look(paths, options, fits, reference)
+      film = spread(paths).flat_map do |path|
+        rendered = Pipeline.new(options.merge(crop: true), reference: reference, **fits.except(:look))
+                           .render(small(path))
+        LookMatch.pixels(rendered.copy_memory)
+      end
+      target = @match_rolls.values.flat_map do |frames|
+        picked = spread(frames)
+        picked.flat_map do |path|
+          image = small(path)
+          area = FrameEdges.detect(image).picture
+          LookMatch.pixels(area ? image.extract_area(*area) : image,
+                           LookMatch::PER_FRAME * LOOK_FRAMES / picked.size)
+        end
+      end
+      LookMatch.fit(film, target)
+    end
+
+    def spread(paths)
+      step = [paths.size / LOOK_FRAMES, 1].max
+      paths.each_slice(step).map(&:first).first(LOOK_FRAMES)
     end
 
     # The median of how the roll's frames tilt, as the frame balance sees them.
@@ -648,7 +691,12 @@ module FilmScan
         opts.on("--match DIR",
                 "Balance toward a roll that already looks right, such as one",
                 "shot the same day on a film the lab scanned well, in place of",
-                "the profile's reference. Give it once for each roll.") { |v| (options[:match] ||= []) << v }
+                "the profile's reference, and carry over its lightness, colour",
+                "and colourfulness. Give it once for each roll, or a pattern",
+                "for some of its frames.") { |v| (options[:match] ||= []) << v }
+        opts.on("--match-strength FLOAT", Float,
+                "How much of the matched rolls' look to carry over, 0 to 1",
+                "(default #{DEFAULTS[:match_strength]}).") { |v| options[:match_strength] = v }
         opts.on("--roll-balance FLOAT", Float,
                 "Strength of the balance toward the reference, 0 to 1",
                 "(default #{DEFAULTS[:roll_balance]}). Only with a reference.") { |v| options[:roll_balance] = v }

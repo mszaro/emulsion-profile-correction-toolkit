@@ -27,6 +27,7 @@ require_relative "film_scan/lost_colour"
 require_relative "film_scan/chroma_map"
 require_relative "film_scan/reference"
 require_relative "film_scan/gamut_fit"
+require_relative "film_scan/look_match"
 require_relative "film_scan/pipeline"
 
 # Corrects lab scans of film stocks the scanner had no profile for. What is
@@ -58,6 +59,8 @@ module FilmScan
     # The film borders stay unless --crop takes them off. Either way the
     # correction is measured on the picture alone.
     crop: false,
+    # How much of the matched rolls' look --match carries over, 0 to 1.
+    match_strength: 1.0,
     # Off unless a profile asks: the falloff is measured across a roll, and a
     # roll of skies and dark ground does not average out the way the fit needs.
     flat_field: 0.0,

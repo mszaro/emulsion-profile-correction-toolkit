@@ -11,8 +11,9 @@ module FilmScan
 
     # The roll's fits, any of which may be nil: its colour balance and tone
     # curve toward the reference, its gamut fit, the falloff in its corners,
-    # and how its frames typically tilt from warm highlights to cool shadows.
-    def initialize(options, balance: nil, tone: nil, fit: nil, flat: nil, tilt: nil, reference: nil)
+    # how its frames typically tilt from warm highlights to cool shadows, and
+    # the look of the rolls it is matched to.
+    def initialize(options, balance: nil, tone: nil, fit: nil, flat: nil, tilt: nil, reference: nil, look: nil)
       @o = options
       @balance = balance
       @tone = tone
@@ -20,6 +21,7 @@ module FilmScan
       @flat = flat
       @tilt = tilt
       @reference = reference
+      @look = look
     end
 
     def call(path)
@@ -80,6 +82,9 @@ module FilmScan
       detail = fix?(:sharpen) || fix?(:grain) ? Detail.measure(inside(srgb)) : nil
       srgb = denoise_chroma(srgb, chroma_for(detail), chroma_radius_for(inside(srgb)))
       srgb = fix?(:sharpen) ? Detail.sharpen(srgb, detail, @o[:sharpness]) : srgb
+      # Last, on the finished frame, since it is the finished look of the
+      # matched rolls it was measured against.
+      srgb = @look.apply(srgb) if @look
       # Again at the end: the tone curve, the contrast and the recovery all
       # push pixels back over the top after the stretch has fitted them.
       Gamut.fit(srgb, headroom_for(nil))

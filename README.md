@@ -72,8 +72,14 @@ bundle exec ./bin/filmscan --profile harman-phoenix-200 \
   --match ~/scans/fuji-same-day ~/scans/phoenix-roll
 ```
 
-Give `--match` once for each roll. It works best when both rolls saw the same
-kind of light and subjects. The measured reference is saved as
+Besides the colour of greys, it carries over how light the matched frames are,
+their colour at each brightness and how colourful they are. Deep shadows keep
+their own colour, since an interior has nothing to learn from sunlit streets.
+`--match-strength 0.6` carries over less of it.
+
+Give `--match` once for each roll, or a quoted pattern for some of its frames,
+such as `--match '~/scans/fuji/00005*.tif'`. It works best when both rolls saw
+the same kind of light and subjects. The measured reference is saved as
 `match-reference.yml` in the output folder and reused on the next run.
 
 ## Output formats
