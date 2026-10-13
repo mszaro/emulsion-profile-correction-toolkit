@@ -144,6 +144,11 @@ module FilmScan
 
     private
 
+    # Settings the roll's fits never see: where and how frames are written,
+    # and the strengths put on the raw fits after they are loaded.
+    NOT_IN_FITS = %i[out only threads gentle previews contact_sheet format quality bits overrides
+                     explain audit convert_only profile roll_tone roll_fit flat_field].freeze
+
     # The roll is fitted once, across every frame, before any frame is written:
     # first the colour balance toward the reference, then the tone curve and
     # the gamut fit, which both see the roll as balanced. Returns the fits
@@ -161,21 +166,14 @@ module FilmScan
       return {} unless want.values.any?
 
       all = find_files(source, nil)
+      # The tuning pass renders frames through the whole pipeline, so every
+      # setting it reads changes the balance it settles on, and the key holds
+      # them all.
+      settings = options.except(*NOT_IN_FITS).merge(fix: options[:fix].sort).sort
       key = AnalysisCache.key(all, healthy_spread: healthy_spread(profile, reference),
                                    neutral: want[:balance] && reference.neutral,
-                                   film_gains: want[:balance] && options[:film_gains],
-                                   roll_balance_limit: want[:balance] && options[:roll_balance_limit],
                                    tone_shape: want[:tone] && reference.tone_shape,
-                                   roll_balance: want[:balance] && options[:roll_balance],
-                                   # The tuning pass renders frames through the whole pipeline,
-                                   # so the headroom it had changes the balance it settles on.
-                                   highlight_headroom: options[:highlight_headroom],
-                                   sky_headroom: options[:sky_headroom],
-                                   frame_balance: options[:frame_balance],
-                                   frame_tint_limit: options[:frame_tint_limit],
-                                   sky_neutral: options[:sky_neutral],
-                                   sky_floor: options[:sky_floor],
-                                   fix: options[:fix].sort)
+                                   settings: settings)
       cached = AnalysisCache.load(destination, key) || {}
       fits = {}
       fits[:balance] = ColourBalance.from_cache(cached[:balance]) if want[:balance] && cached[:balance]

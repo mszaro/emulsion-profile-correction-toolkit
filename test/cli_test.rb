@@ -41,6 +41,30 @@ class CLITest < Minitest::Test
     end
   end
 
+  # A roll rendered again into another folder reuses what was measured for
+  # the first one, and the new folder gets the same fits beside it.
+  def test_a_second_folder_reuses_the_roll_analysis
+    Dir.mktmpdir do |dir|
+      source = File.join(dir, "roll")
+      Dir.mkdir(source)
+      write_roll(source, frames: 2)
+      first = File.join(dir, "first")
+      second = File.join(dir, "second")
+
+      status, out = run_cli("--profile", "lucky-shd-400", "--out", first, source)
+      assert_equal 0, status, out
+      status, out = run_cli("--profile", "lucky-shd-400", "--out", second, source)
+      assert_equal 0, status, out
+      assert_match(/reusing the roll analysis/, out)
+      assert_equal File.read(File.join(first, "roll-fit.yml")), File.read(File.join(second, "roll-fit.yml"))
+
+      # A setting the tuning renders read is part of the key.
+      status, out = run_cli("--profile", "lucky-shd-400", "--contrast", "0.2", "--out", File.join(dir, "third"), source)
+      assert_equal 0, status, out
+      refute_match(/reusing the roll analysis/, out)
+    end
+  end
+
   # Film the lab scanned well only changes container: every pixel comes back
   # as it went in, and no profile is needed.
   def test_convert_only_leaves_the_pixels_alone

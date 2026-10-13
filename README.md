@@ -29,7 +29,10 @@ bundle exec ./bin/filmscan --profile lomochrome-color-92 ~/scans/my-roll
 It reads TIFF, JPEG and PNG files. Corrected copies go to
 `~/scans/my-roll - corrected`, using the same file format as the originals.
 The originals are left alone. The output folder also gets a `settings.yml`
-with the settings used for the run.
+with the settings used for the run, and a `roll-fit.yml` with what was
+measured across the roll. A copy of the measurements is kept in
+`~/.cache/film_scan`, so correcting the same roll again with the same settings,
+into any folder, skips measuring it.
 
 For previews and a contact sheet:
 

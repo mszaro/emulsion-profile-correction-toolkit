@@ -3,6 +3,10 @@ require "tmpdir"
 require_relative "../lib/film_scan"
 require_relative "../lib/film_scan/cli"
 
+# The shared roll fits go to a folder of the test run's own, not the user's.
+ENV["XDG_CACHE_HOME"] = Dir.mktmpdir("film_scan_cache")
+Minitest.after_run { FileUtils.remove_entry(ENV["XDG_CACHE_HOME"]) }
+
 module TestImages
   module_function
 
