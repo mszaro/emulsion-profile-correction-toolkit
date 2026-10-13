@@ -228,7 +228,9 @@ module FilmScan
 
       a = var / (var + eps)
       b = mean * a.linear(-1, 1)
-      resize_to(blur(a, sigma), y) * y + resize_to(blur(b, sigma), y)
+      # Settled while small, since stretching a blur over the frame asks for
+      # each of its pixels again for every tile it reaches.
+      resize_to(blur(a, sigma).copy_memory, y) * y + resize_to(blur(b, sigma).copy_memory, y)
     end
 
     # Highlight reconstruction. A channel clipped at white has lost whatever it
@@ -278,7 +280,8 @@ module FilmScan
       floor = [total * FALLBACK, TINY].max
 
       local = blur(small * weight, sigma) + mean.map { |m| m * floor }
-      resize_to(local / (blur(weight, sigma) + floor), image)
+      # Settled while small, as in guided_base.
+      resize_to((local / (blur(weight, sigma) + floor)).copy_memory, image)
     end
 
     # An estimate can land above white, where no screen goes. Bringing the
