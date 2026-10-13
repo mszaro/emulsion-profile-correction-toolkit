@@ -304,7 +304,7 @@ module FilmScan
       if wants_map
         map = ChromaMap.from_cache(@o[:chroma_map].transform_keys(&:to_sym))
         map.strength = @o[:chroma_shape]
-        scan = map.apply(scan, lost)
+        scan = map.apply(scan, lost, linear: linear)
       end
       wants_easing ? LostColour.apply(scan, @reference.neutral, @o[:lost_colour]) : scan
     end

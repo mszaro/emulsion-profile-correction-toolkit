@@ -88,11 +88,12 @@ module FilmScan
     # Red and blue are moved against green, which keeps brightness where the
     # tone work put it. Where `lost` says a pixel's blue has nothing left, the
     # map steps aside: stretching a colour that was never recorded only makes
-    # a louder version of the wrong answer.
-    def apply(srgb, lost = nil)
+    # a louder version of the wrong answer. A caller already holding the frame
+    # in linear light passes it in, so it is worked out once.
+    def apply(srgb, lost = nil, linear: nil)
       return srgb if strength <= 0
 
-      linear = Colour.to_linear(srgb)
+      linear ||= Colour.to_linear(srgb)
       green = (linear[1] < 1e-5).ifthenelse(1e-5, linear[1])
       bands = [0, 2].map.with_index do |channel, axis|
         value = (linear[channel] < 1e-5).ifthenelse(1e-5, linear[channel])
