@@ -86,6 +86,17 @@ class OutputFormatTest < Minitest::Test
     save("png", monochrome: true) { |image, _| assert_equal 1, image.bands }
   end
 
+  # Left tagged as sRGB, one channel came out of PNG at eight bits and out of
+  # JPEG 2000 as three channels.
+  def test_black_and_white_keeps_sixteen_bits_in_one_channel
+    %w[png tiff jp2].each do |format|
+      save(format, bits: 16, monochrome: true) do |image, _|
+        assert_equal :ushort, image.format, format
+        assert_equal 1, image.bands, format
+      end
+    end
+  end
+
   def heif_info(format_options = {})
     skip "heif-enc is not installed" unless FilmScan::CLI::HEIF_ENC
     Dir.mktmpdir do |dir|

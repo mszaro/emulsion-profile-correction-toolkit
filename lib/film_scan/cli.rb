@@ -458,10 +458,10 @@ module FilmScan
         quantise(result, bits, dither: dither).heifsave(partial, Q: quality, bitdepth: bits, lossless: quality >= 100,
                                                  compression: :hevc, subsample_mode: :off)
       when "jp2"
-        quantise(result, bits, dither: dither).jp2ksave(partial, Q: quality, lossless: quality >= 100,
-                                                 subsample_mode: :off)
+        tagged(quantise(result, bits, dither: dither), bits).jp2ksave(partial, Q: quality, lossless: quality >= 100,
+                                                                      subsample_mode: :off)
       when "png"
-        quantise(result, bits, dither: dither).pngsave(partial, compression: 6)
+        tagged(quantise(result, bits, dither: dither), bits).pngsave(partial, compression: 6)
       else
         quantise(result, bits, dither: dither).tiffsave(partial, compression: :deflate, predictor: :horizontal)
       end
@@ -483,12 +483,10 @@ module FilmScan
       # The PNG it passes through carries no orientation, so the frame is turned
       # upright here.
       frame = quantise(upright(result, orientation), bits > 8 ? 16 : 8, dither: dither)
-      # Tagged for its depth, or a one channel frame is written to PNG at eight bits.
       # Stored rather than compressed: a grainy frame shrinks by 5% at the
       # lightest setting, which cost 3s to write and a second more for heif-enc
       # to read back.
-      tag = { [1, true] => :grey16, [1, false] => :b_w, [3, true] => :rgb16, [3, false] => :srgb }
-      frame.copy(interpretation: tag.fetch([frame.bands, bits > 8])).pngsave(png, compression: 0)
+      tagged(frame, bits).pngsave(png, compression: 0)
       args = [HEIF_ENC, "-o", heic]
       args += ["-b", bits.to_s] if bits > 8
       args += ["-p", "chroma=444"] if result.bands > 1
@@ -508,6 +506,14 @@ module FilmScan
     rescue StandardError
       File.delete(png) if png && File.exist?(png)
       raise
+    end
+
+    # A quantised frame tagged for its depth and its channels, since the savers
+    # read both off the tag: left as sRGB, a one channel frame came out of PNG
+    # at eight bits and out of JPEG 2000 as three channels.
+    def tagged(frame, bits)
+      tag = { [1, true] => :grey16, [1, false] => :b_w, [3, true] => :rgb16, [3, false] => :srgb }
+      frame.copy(interpretation: tag.fetch([frame.bands, bits > 8]))
     end
 
     # A frame as it was scanned, cropped to the picture when --crop asks.
