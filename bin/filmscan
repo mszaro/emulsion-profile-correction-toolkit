@@ -1,4 +1,8 @@
 #!/usr/bin/env ruby
+# The roll's fits loop over pixels in Ruby, and YJIT runs those loops faster
+# with the same arithmetic.
+RubyVM::YJIT.enable if defined?(RubyVM::YJIT.enable)
+
 require_relative "../lib/film_scan"
 require_relative "../lib/film_scan/cli"
 
