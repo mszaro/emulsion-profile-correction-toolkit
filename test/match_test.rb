@@ -56,7 +56,7 @@ class MatchTest < Minitest::Test
         status, out = run_cli("--profile", "lucky-shd-400", "--match", File.join(dir, name),
                               "--format", "png", "--bits", "8", "--out", out_dir, File.join(dir, "roll"))
         assert_equal 0, status, out
-        assert_match(/measuring #{name} to match/, out)
+        assert_match(/measuring #{name} \(3 frames\) to match/, out)
         assert File.exist?(File.join(out_dir, "match-reference.yml"))
         [name, out_dir]
       end
@@ -69,6 +69,18 @@ class MatchTest < Minitest::Test
     end
   end
 
+  # A pattern picks some of a roll's frames, such as only its city shots.
+  def test_matches_some_of_a_rolls_frames
+    Dir.mktmpdir do |dir|
+      write_frames(File.join(dir, "cool"), [0.85, 1.0, 1.18])
+      write_frames(File.join(dir, "roll"), [1.05, 1.0, 0.9], frames: 2)
+      status, out = run_cli("--profile", "lucky-shd-400", "--match", File.join(dir, "cool", "00000[12].png"),
+                            "--format", "png", "--bits", "8", "--out", File.join(dir, "out"), File.join(dir, "roll"))
+      assert_equal 0, status, out
+      assert_match(/measuring cool \(2 frames\) to match/, out)
+    end
+  end
+
   def test_a_missing_roll_to_match_fails_cleanly
     Dir.mktmpdir do |dir|
       write_frames(File.join(dir, "roll"), [1.0, 1.0, 1.0], frames: 1)
@@ -78,7 +90,7 @@ class MatchTest < Minitest::Test
                                     "--out", File.join(dir, "out"), File.join(dir, "roll")])
       end
       assert_equal 1, status
-      assert_match(/not a directory/, err)
+      assert_match(/no frames to match/, err)
     end
   end
 end

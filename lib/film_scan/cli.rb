@@ -160,29 +160,36 @@ module FilmScan
 
     # A reference measured from rolls already corrected the way they should
     # look, such as a film the lab scanned well on the same day, in place of
-    # the profile's. Kept beside the output and measured again only when those
-    # rolls or the measuring code change.
-    def matched_reference(dirs, destination)
-      rolls = dirs.to_h do |dir|
-        dir = File.expand_path(dir)
-        raise ArgumentError, "not a directory: #{dir}" unless File.directory?(dir)
+    # the profile's. Each is a roll's folder, or a pattern for some of its
+    # frames. Kept beside the output and measured again only when those frames
+    # or the measuring code change.
+    def matched_reference(patterns, destination)
+      rolls = patterns.each_with_object({}) do |pattern, found|
+        pattern = File.expand_path(pattern)
+        paths = if File.directory?(pattern)
+                  find_files(pattern, nil)
+                else
+                  Dir.glob(pattern).select { |path| EXTENSIONS.include?(File.extname(path).delete(".")) }.sort
+                end
+        raise ArgumentError, "no frames to match in #{pattern}" if paths.empty?
 
-        [File.basename(dir), find_files(dir, nil)]
+        (found[File.basename(File.dirname(paths.first))] ||= []).concat(paths)
       end
+      named = rolls.map { |roll, paths| "#{roll} (#{paths.size} frames)" }.join(" and ")
       key = AnalysisCache.key(rolls.values.flatten, match: rolls.keys)
       path = File.join(destination, MATCH_FILE)
       if File.exist?(path)
         data = YAML.safe_load(File.read(path), permitted_classes: [], aliases: false)
         if data.is_a?(Hash) && data["key"] == key
-          puts "matching #{rolls.keys.join(' and ')}, as measured before"
+          puts "matching #{named}, as measured before"
           return Reference.load(path)
         end
       end
 
-      puts "measuring #{rolls.keys.join(' and ')} to match..."
-      reference = Reference.measure(rolls, id: "match", name: rolls.keys.join(" and "))
+      puts "measuring #{named} to match..."
+      reference = Reference.measure(rolls, id: "match", name: named)
       FileUtils.mkdir_p(destination)
-      comment = "Measured by --match from:\n" + rolls.keys.map { |roll| "  #{roll}" }.join("\n")
+      comment = "Measured by --match from:\n" + rolls.map { |roll, paths| "  #{roll}, #{paths.size} frames" }.join("\n")
       File.write(path, "#{reference.to_yaml(comment)}\nkey: #{key}\n")
       reference
     end
