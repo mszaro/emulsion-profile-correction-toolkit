@@ -12,8 +12,6 @@ module FilmScan
     # neighbours and pulls in the tails that the black and white points need.
     TARGET_SAMPLES = 300_000
 
-    attr_reader :pixels, :lumas
-
     # Expects a float sRGB image in 0..1, which is what the whole pipeline uses.
     def initialize(image, target: TARGET_SAMPLES)
       w = image.width
@@ -28,9 +26,27 @@ module FilmScan
 
       # Kept in memory, since the vibrance search reuses it at every step.
       @sample_image = inner.cast(:float).copy_memory
+    end
+
+    # The sample as Ruby arrays, unpacked the first time a measurement wants
+    # single pixels. The vibrance search works on the image and never does.
+    def pixels
+      unpack unless @pixels
+      @pixels
+    end
+
+    def lumas
+      unpack unless @lumas
+      @lumas
+    end
+
+    def size
+      @sample_image.width * @sample_image.height
+    end
+
+    def unpack
       bands = @sample_image.bands
       raw = @sample_image.write_to_memory.unpack("f*")
-
       @pixels = []
       @lumas = []
       raw.each_slice(bands) do |px|
@@ -64,6 +80,26 @@ module FilmScan
       sorted[lo] + (sorted[hi] - sorted[lo]) * (rank - lo)
     end
 
+    # The same answer as percentile gives on the sorted values, found without
+    # sorting them: only the one or two ranks it reads are picked out, from
+    # whichever end is nearer.
+    def self.percentile_of(values, pct)
+      return 0.0 if values.empty?
+      n = values.size
+      rank = (pct / 100.0) * (n - 1)
+      lo = rank.floor
+      hi = rank.ceil
+      if hi < n / 2
+        smallest = values.min(hi + 1)
+        low, high = smallest[lo], smallest[hi]
+      else
+        largest = values.max(n - lo)
+        low, high = largest[n - 1 - lo], largest[n - 1 - hi]
+      end
+      return low if lo == hi
+      low + (high - low) * (rank - lo)
+    end
+
     def percentile(values, pct)
       self.class.percentile(values.sort, pct)
     end
@@ -72,9 +108,8 @@ module FilmScan
     # default, which adds contrast without touching hue. Raising `neutral`
     # gives each channel its own, which is grey-world by another name.
     def endpoints(black_pct, white_pct, neutral, max_stretch: nil)
-      sorted_luma = lumas.sort
-      glo = self.class.percentile(sorted_luma, black_pct)
-      ghi = self.class.percentile(sorted_luma, white_pct)
+      glo = self.class.percentile_of(lumas, black_pct)
+      ghi = self.class.percentile_of(lumas, white_pct)
 
       # A frame using very little range mostly has grain to magnify, so cap
       # how far it is stretched and let it stay a little flat.
@@ -85,10 +120,13 @@ module FilmScan
         ghi = [centre + half, 1.0].min
       end
 
+      # With no grey-world share every channel takes the shared pair as it is.
+      return Array.new(3) { [glo, ghi] } if neutral.zero?
+
       (0..2).map do |c|
-        vals = pixels.map { |px| px[c] }.sort
-        clo = self.class.percentile(vals, black_pct)
-        chi = self.class.percentile(vals, white_pct)
+        vals = pixels.map { |px| px[c] }
+        clo = self.class.percentile_of(vals, black_pct)
+        chi = self.class.percentile_of(vals, white_pct)
         [glo + neutral * (clo - glo), ghi + neutral * (chi - ghi)]
       end
     end
@@ -249,7 +287,7 @@ module FilmScan
     # The vibrance amount that lands this frame on the target saturation, found
     # by bisecting on the sampled pixels. Frames already there are left alone.
     def vibrance_for(target, knee, limit)
-      return 1.0 if target <= 0 || pixels.empty?
+      return 1.0 if target <= 0 || size.zero?
       prepare_vibrance(knee)
       lo = 1.0
       hi = limit
