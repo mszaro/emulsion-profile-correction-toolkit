@@ -190,10 +190,13 @@ module FilmScan
     # so the fit stays quick on a long roll.
     def self.linear_pixels(sample, offsets)
       step = [sample.r.size / ROLL_PIXELS, 1].max
-      (0...sample.r.size).step(step).map do |i|
-        [sample.r[i], sample.g[i], sample.b[i]].each_with_index.map do |v, c|
-          Colour.srgb_to_linear_scalar(remove_floor(v, offsets[c]) / 255.0)
-        end
+      r = sample.r
+      g = sample.g
+      b = sample.b
+      (0...r.size).step(step).map do |i|
+        [Colour.srgb_to_linear_scalar(remove_floor(r[i], offsets[0]) / 255.0),
+         Colour.srgb_to_linear_scalar(remove_floor(g[i], offsets[1]) / 255.0),
+         Colour.srgb_to_linear_scalar(remove_floor(b[i], offsets[2]) / 255.0)]
       end
     end
 
