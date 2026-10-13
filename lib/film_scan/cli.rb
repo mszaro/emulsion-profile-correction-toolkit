@@ -441,6 +441,8 @@ module FilmScan
       args = [HEIF_ENC, "-o", heic]
       args += ["-b", bits.to_s] if bits > 8
       args += ["-p", "chroma=444"] if result.bands > 1
+      # The encoder starts a thread per core of its own, so it follows --threads.
+      args += ["-p", "x265:pools=#{Vips.concurrency}"]
       args += quality >= 100 ? ["-L"] : ["-p", "x265:qp=#{((100 - quality) * 0.51).round.clamp(0, 51)}"]
       ok = system(*args, png, out: File::NULL, err: File::NULL)
       raise "heif-enc could not write #{File.basename(heic)}" unless ok && File.exist?(heic)
