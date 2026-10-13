@@ -227,6 +227,8 @@ module FilmScan
       end
       puts format("frames tilt %+.2f stops per e-fold from shadows to highlights", fits[:tilt]) if fits[:tilt]
       fits.compact
+    ensure
+      @tuned = nil
     end
 
     # The median of how the roll's frames tilt, as the frame balance sees them.
@@ -234,7 +236,9 @@ module FilmScan
     # films and some lab sessions tilt every frame.
     def roll_tilt(paths, options, fits, reference)
       tilts = paths.filter_map do |path|
-        Pipeline.new(options, reference: reference, **fits.slice(:balance, :flat)).tilt(small(path))
+        # The frames the tuning read are already in memory at this size.
+        image = @tuned&.delete(path) || small(path)
+        Pipeline.new(options, reference: reference, **fits.slice(:balance, :flat)).tilt(image)
       end
       tilts.empty? ? nil : ColourBalance.percentile(tilts, 50)
     end
@@ -320,7 +324,9 @@ module FilmScan
     # finished picture, and nudges the roll's balance until they land right.
     def tune_balance(paths, options, fits, reference)
       step = [paths.size / TUNE_FRAMES, 1].max
-      frames = paths.each_slice(step).map(&:first).first(TUNE_FRAMES).map { |path| small(path) }
+      chosen = paths.each_slice(step).map(&:first).first(TUNE_FRAMES)
+      frames = chosen.map { |path| small(path) }
+      @tuned = chosen.zip(frames).to_h
       TUNE_ROUNDS.times do
         # Without the lamp guard, which measures frames against the balance
         # this settles on, and cropped, since only the picture is measured.
