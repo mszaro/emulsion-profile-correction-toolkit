@@ -134,24 +134,24 @@ class DynamicsTest < Minitest::Test
   # perfectly well. Told where the scanner clipped, the reconstruction leaves
   # it alone, and still rebuilds what the scanner did lose.
   def test_only_what_the_scanner_clipped_is_rebuilt
-  patch = [1.20, 0.86, 0.75]
-  surround = [0.88, 0.63, 0.55]
-  image = display_image(200, 200) do |x, y|
-    (80..119).cover?(x) && (80..119).cover?(y) ? patch : surround
-  end
-  measured = D.measure(image)
-  untouched = D.apply(image, measured, 1.0, lost: Vips::Image.black(200, 200).cast(:float)).copy_memory
-  rebuilt = D.apply(image, measured, 1.0, lost: Vips::Image.black(200, 200).cast(:float) + 1.0).copy_memory
-  ratio = ->(im) { px = im.getpoint(100, 100); px[1] / px[0] }
-  assert_in_delta ratio.(image), ratio.(untouched), 1e-3
-  assert_operator (ratio.(rebuilt) - patch[1] / patch[0]).abs, :<, (ratio.(image) - patch[1] / patch[0]).abs * 0.6
+    patch = [1.20, 0.86, 0.75]
+    surround = [0.88, 0.63, 0.55]
+    image = display_image(200, 200) do |x, y|
+      (80..119).cover?(x) && (80..119).cover?(y) ? patch : surround
+    end
+    measured = D.measure(image)
+    untouched = D.apply(image, measured, 1.0, lost: Vips::Image.black(200, 200).cast(:float)).copy_memory
+    rebuilt = D.apply(image, measured, 1.0, lost: Vips::Image.black(200, 200).cast(:float) + 1.0).copy_memory
+    ratio = ->(im) { px = im.getpoint(100, 100); px[1] / px[0] }
+    assert_in_delta ratio.(image), ratio.(untouched), 1e-3
+    assert_operator (ratio.(rebuilt) - patch[1] / patch[0]).abs, :<, (ratio.(image) - patch[1] / patch[0]).abs * 0.6
   end
 
   def test_scanner_clipping_counts_only_the_top_of_the_range
-  scan = display_image(2, 1) { |x, _| x.zero? ? [245 / 255.0, 0.9, 0.9] : [1.0, 0.9, 0.9] }
-  clipped = D.scanner_clipping(scan)
-  assert_in_delta 0.0, clipped.getpoint(0, 0)[0], 1e-6
-  assert_in_delta 1.0, clipped.getpoint(1, 0)[0], 1e-6
+    scan = display_image(2, 1) { |x, _| x.zero? ? [245 / 255.0, 0.9, 0.9] : [1.0, 0.9, 0.9] }
+    clipped = D.scanner_clipping(scan)
+    assert_in_delta 0.0, clipped.getpoint(0, 0)[0], 1e-6
+    assert_in_delta 1.0, clipped.getpoint(1, 0)[0], 1e-6
   end
 
   def test_a_clipped_sky_loses_its_colour_shift

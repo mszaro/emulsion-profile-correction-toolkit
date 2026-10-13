@@ -41,18 +41,18 @@ class PipelineVetoesTest < Minitest::Test
   # the lab left yellow, and darkening the sky to make room for that blue
   # turned it into a grey-lilac slab, so the frame balance gets no headroom.
   def test_the_frame_balance_does_not_darken_a_white_sky
-  frame = TestImages.linear_image(200, 150) do |x, y|
-    next [0.80, 0.80, 0.80] if y < 40
+    frame = TestImages.linear_image(200, 150) do |x, y|
+      next [0.80, 0.80, 0.80] if y < 40
 
-    level = [0.01, 0.03, 0.08, 0.2, 0.45][((x / 10) + (y / 10)) % 5]
-    [level, level, level * 2**-0.8]
-  end
-  reference = FilmScan::Reference.load("fujifilm-superia")
-  options = FilmScan::DEFAULTS.merge(reference: "fujifilm-superia", frame_balance: 1.0,
-                                     frame_balance_limit: 2.5, highlight_headroom: 1.5)
-  balanced = FilmScan::Pipeline.new(options, reference: reference).send(:balance, frame)
-  sky = ->(im) { TestImages.mean_pixel(im, 20, 5, 160, 30).zip(FilmScan::Pipeline::LUMA).sum { |v, w| v * w } }
-  assert_operator sky.(balanced), :>=, sky.(frame) - 0.01, "the sky should keep its brightness"
+      level = [0.01, 0.03, 0.08, 0.2, 0.45][((x / 10) + (y / 10)) % 5]
+      [level, level, level * 2**-0.8]
+    end
+    reference = FilmScan::Reference.load("fujifilm-superia")
+    options = FilmScan::DEFAULTS.merge(reference: "fujifilm-superia", frame_balance: 1.0,
+                                       frame_balance_limit: 2.5, highlight_headroom: 1.5)
+    balanced = FilmScan::Pipeline.new(options, reference: reference).send(:balance, frame)
+    sky = ->(im) { TestImages.mean_pixel(im, 20, 5, 160, 30).zip(FilmScan::Pipeline::LUMA).sum { |v, w| v * w } }
+    assert_operator sky.(balanced), :>=, sky.(frame) - 0.01, "the sky should keep its brightness"
   end
 
   # A dark interior with one lit window: too little of it for the frame fit to

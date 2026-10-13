@@ -121,7 +121,7 @@ class OutputFormatTest < Minitest::Test
     end
   end
 
-def test_format_names_people_actually_type
+  def test_format_names_people_actually_type
     assert_equal "jpeg", @cli.send(:output_format, "x.tiff", { format: "jpg" })
     assert_equal "heic", @cli.send(:output_format, "x.tiff", { format: "heif" })
     assert_equal "jp2", @cli.send(:output_format, "x.tiff", { format: "jpeg2000" })
