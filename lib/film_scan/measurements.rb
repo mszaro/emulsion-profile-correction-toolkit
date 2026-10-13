@@ -29,31 +29,30 @@ module FilmScan
     end
 
     # The sample as Ruby arrays, unpacked the first time a measurement wants
-    # single pixels. The vibrance search works on the image and never does.
+    # single pixels. The vibrance search works on the image and never does,
+    # and the black and white points want only the lumas.
     def pixels
-      unpack unless @pixels
-      @pixels
+      @pixels ||= raw.each_slice(@sample_image.bands).map { |px| px.size == 3 ? px : px.first(3) }
     end
 
+    # The same sums luma(px) makes, read straight off the unpacked samples.
     def lumas
-      unpack unless @lumas
-      @lumas
+      @lumas ||= begin
+        values = raw
+        bands = @sample_image.bands
+        Array.new(values.size / bands) do |i|
+          at = i * bands
+          LUMA[0] * values[at] + LUMA[1] * values[at + 1] + LUMA[2] * values[at + 2]
+        end
+      end
     end
 
     def size
       @sample_image.width * @sample_image.height
     end
 
-    def unpack
-      bands = @sample_image.bands
-      raw = @sample_image.write_to_memory.unpack("f*")
-      @pixels = []
-      @lumas = []
-      raw.each_slice(bands) do |px|
-        px = px.first(3) if bands != 3
-        @pixels << px
-        @lumas << luma(px)
-      end
+    def raw
+      @raw ||= @sample_image.write_to_memory.unpack("f*")
     end
 
     def luma(px)
