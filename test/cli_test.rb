@@ -67,7 +67,7 @@ class CLITest < Minitest::Test
     assert_equal ["--fix=#{FilmScan::DEFAULT_FIXES.join(",")}"], FilmScan::CLI.bare_fix(["--fix"])
   end
 
-def test_unknown_reference_fails_cleanly
+  def test_unknown_reference_fails_cleanly
     Dir.mktmpdir do |dir|
       write_roll(dir, frames: 1)
       status = nil
