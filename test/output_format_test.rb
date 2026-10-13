@@ -82,38 +82,44 @@ class OutputFormatTest < Minitest::Test
     assert_operator lossless, :>, lossy
   end
 
-def test_black_and_white_is_written_as_one_channel
-  save("png", monochrome: true) { |image, _| assert_equal 1, image.bands }
-end
-
-def heif_info(format_options = {})
-  skip "heif-enc is not installed" unless FilmScan::CLI::HEIF_ENC
-  Dir.mktmpdir do |dir|
-    path = File.join(dir, "frame.heic")
-    @cli.send(:save, format_options.delete(:frame) || @frame, path, "heic",
-              FilmScan::DEFAULTS.merge(bits: nil, quality: 98, **format_options), format_options.delete(:orientation) || 1)
-    yield `heif-info "#{path}" 2>&1`, Vips::Image.new_from_file(path)
+  def test_black_and_white_is_written_as_one_channel
+    save("png", monochrome: true) { |image, _| assert_equal 1, image.bands }
   end
-end
 
-# Full colour resolution in colour, and true monochrome in black and white.
-def test_heic_keeps_colour_at_full_resolution
-  heif_info { |info, _| assert_match(/4:4:4/, info) }
-end
-
-def test_black_and_white_heic_is_monochrome
-  heif_info(monochrome: true) { |info, _| assert_match(/monochrome/, info) }
-end
-
-# The PNG the encoder reads carries no orientation, so a portrait frame is
-# turned upright before it is written.
-def test_a_portrait_frame_is_written_upright
-  skip "heif-enc is not installed" unless FilmScan::CLI::HEIF_ENC
-  save("heic", bits: 10, orientation: 6) do |image, _|
-    assert_equal 48, image.width
-    assert_equal 64, image.height
+  def heif_info(format_options = {})
+    skip "heif-enc is not installed" unless FilmScan::CLI::HEIF_ENC
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "frame.heic")
+      @cli.send(:save, format_options.delete(:frame) || @frame, path, "heic",
+                FilmScan::DEFAULTS.merge(bits: nil, quality: 98, **format_options), format_options.delete(:orientation) || 1)
+      yield `heif-info "#{path}" 2>&1`, Vips::Image.new_from_file(path)
+    end
   end
-end
+
+  # Full colour resolution in colour, and true monochrome in black and white.
+  def test_heic_keeps_colour_at_full_resolution
+    heif_info do |info, _|
+      assert_match(/4:4:4/, info)
+      assert_match(/bit depth: 10/, info)
+    end
+  end
+
+  def test_black_and_white_heic_is_monochrome
+    heif_info(monochrome: true) do |info, _|
+      assert_match(/monochrome/, info)
+      assert_match(/bit depth: 10/, info)
+    end
+  end
+
+  # The PNG the encoder reads carries no orientation, so a portrait frame is
+  # turned upright before it is written.
+  def test_a_portrait_frame_is_written_upright
+    skip "heif-enc is not installed" unless FilmScan::CLI::HEIF_ENC
+    save("heic", bits: 10, orientation: 6) do |image, _|
+      assert_equal 48, image.width
+      assert_equal 64, image.height
+    end
+  end
 
 def test_format_names_people_actually_type
     assert_equal "jpeg", @cli.send(:output_format, "x.tiff", { format: "jpg" })

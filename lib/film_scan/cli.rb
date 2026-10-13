@@ -434,7 +434,10 @@ module FilmScan
       heic = "#{partial}.heic"
       # The PNG it passes through carries no orientation, so the frame is turned
       # upright here.
-      quantise(upright(result, orientation), bits > 8 ? 16 : 8, dither: dither).pngsave(png, compression: 1)
+      frame = quantise(upright(result, orientation), bits > 8 ? 16 : 8, dither: dither)
+      # Tagged for its depth, or a one channel frame is written to PNG at eight bits.
+      tag = { [1, true] => :grey16, [1, false] => :b_w, [3, true] => :rgb16, [3, false] => :srgb }
+      frame.copy(interpretation: tag.fetch([frame.bands, bits > 8])).pngsave(png, compression: 1)
       args = [HEIF_ENC, "-o", heic]
       args += ["-b", bits.to_s] if bits > 8
       args += ["-p", "chroma=444"] if result.bands > 1
