@@ -21,7 +21,9 @@ module FilmScan
       tile = (image * 255).cast(:uchar).thumbnail_image(TILE, height: TILE - CAPTION, size: :down)
       tile = tile.embed((TILE - tile.width) / 2, (TILE - CAPTION - tile.height) / 2,
                         TILE, TILE - CAPTION, extend: :background, background: BACKGROUND)
-      @tiles << tile.join(caption(name, TILE), :vertical, background: BACKGROUND)
+      # Made now, so the sheet holds small tiles rather than every frame of
+      # the roll until it is written.
+      @tiles << tile.join(caption(name, TILE), :vertical, background: BACKGROUND).copy_memory
       self
     end
 

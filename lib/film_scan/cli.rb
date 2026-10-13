@@ -111,10 +111,10 @@ module FilmScan
         stem = File.basename(name, ".*")
         frame_options = options.merge(overrides[stem] || {})
         result = convert ? converted(path, options) : Pipeline.new(frame_options, reference: reference, **fits).call(path)
-        # Render once into memory when a preview is wanted too. Shrinking the
-        # unrendered pipeline for the preview ran all of it again, and on a
-        # 6144px frame that took 45GB.
-        result = result.copy_memory if options[:previews]
+        # Render once into memory when a preview or the contact sheet wants the
+        # frame too. Shrinking the unrendered pipeline for either ran all of it
+        # again, and on a 6144px frame that took 45GB.
+        result = result.copy_memory if options[:previews] || sheet
         written = write_result(result, destination, stem, path, options)
         if options[:previews]
           jpeg = File.join(preview_dir, "#{stem}.jpg")
