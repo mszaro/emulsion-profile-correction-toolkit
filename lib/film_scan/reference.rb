@@ -36,7 +36,7 @@ module FilmScan
         shapes << ToneCurve.shape_of(sample)
         # How widely a well scanned roll spreads its colour, so the gamut fit
         # knows what healthy looks like on the film it is aiming at.
-        spreads << GamutFit.new(sample, healthy_spread: 0.0, verbose: false).spread_before
+        spreads << GamutFit.spread_of(sample)
       end
 
       # A well-scanned film has no large cast to find first, so each band is

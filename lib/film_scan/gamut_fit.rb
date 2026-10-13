@@ -39,6 +39,14 @@ module FilmScan
       end
     end
 
+    # A roll's spread as it stands, the spread_before of a fit, for a roll
+    # measured as a reference, where a fit would only be thrown away.
+    def self.spread_of(samples)
+      allocate.tap do |f|
+        %i[r g b y].each { |band| f.instance_variable_set(:"@#{band}", samples.public_send(band)) }
+      end.spread(Array.new(BAND_CENTRES.size) { [1.0, 1.0] })
+    end
+
     # Green is held fixed as the reference, since something has to define the
     # level. On the one film profiled so far it is also the least damaged.
     def initialize(samples, healthy_spread:, verbose: true)
