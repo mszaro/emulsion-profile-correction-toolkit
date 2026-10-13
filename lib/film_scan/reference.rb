@@ -1,4 +1,5 @@
 require "yaml"
+require "json"
 
 module FilmScan
   # How a film scanned with the right profile renders neutral surfaces at each
@@ -10,8 +11,43 @@ module FilmScan
 
     attr_reader :id, :name, :neutral, :tone_shape, :healthy_spread
 
+    # Each roll gets an equal say in the neutral, whatever its length.
+    PER_ROLL = 60_000
+
     def self.available
       Dir.glob(File.join(DIR, "*.yml")).map { |f| File.basename(f, ".yml") }.sort
+    end
+
+    # Measured from well scanned rolls, given as lists of paths keyed by the
+    # roll's name. Sampled inside the picture, since the scanner's borders are
+    # not part of any scene.
+    def self.measure(rolls, id:, name:, verbose: true)
+      pixels = []
+      shapes = []
+      spreads = []
+      rolls.each do |roll, paths|
+        raise ArgumentError, "no images in #{roll}" if paths.empty?
+
+        puts roll if verbose
+        sample = RollSample.collect(paths, verbose: verbose) { |image| FrameEdges.detect(image).picture }
+        offsets = ColourBalance.black_offsets(sample)
+        linear = ColourBalance.linear_pixels(sample, offsets)
+        pixels.concat(linear.each_slice([linear.size / PER_ROLL, 1].max).map(&:first))
+        shapes << ToneCurve.shape_of(sample)
+        # How widely a well scanned roll spreads its colour, so the gamut fit
+        # knows what healthy looks like on the film it is aiming at.
+        spreads << GamutFit.new(sample, healthy_spread: 0.0, verbose: false).spread_before
+      end
+
+      # A well-scanned film has no large cast to find first, so each band is
+      # read from the greys nearest neutral rather than from whatever fills it.
+      zero = Array.new(ColourBalance::TONES.size) { [0.0, 0.0] }
+      neutral = ColourBalance.neutral_by_tone(pixels, from: zero)
+      raise ArgumentError, "too few pixels to measure a neutral" if neutral.compact.size < 2
+
+      new(id, name: name, tones: ColourBalance::TONES, neutral: ColourBalance.fill_gaps(neutral),
+              tone_shape: shapes.transpose.map { |values| Measurements.percentile(values.sort, 50) },
+              healthy_spread: Measurements.percentile(spreads.sort, 50))
     end
 
     def self.load(name)
@@ -57,6 +93,27 @@ module FilmScan
       @neutral = neutral
       @tone_shape = shape
       @healthy_spread = spread
+    end
+
+    # As references/ keeps it, with a comment saying where it came from.
+    def to_yaml(comment)
+      <<~YAML
+        # #{comment.lines.map(&:chomp).join("\n# ")}
+        name: #{name.to_json}
+
+        # Neutral is [red, blue] in stops relative to green, at each tone band.
+        tones: [#{ColourBalance::TONES.join(', ')}]
+        neutral:
+        #{neutral.map { |r, b| format('  - [%.3f, %.3f]', r, b) }.join("\n")}
+
+        # Where a typical frame's luma falls, at #{ToneCurve::QUANTILES.join(', ')} percent,
+        # once stretched between its #{ToneCurve::BLACK} and #{ToneCurve::WHITE} percentiles.
+        tone_shape: [#{tone_shape.map { |v| format('%.3f', v) }.join(', ')}]
+
+        # How widely a typical roll spreads its colour across hues, the median of
+        # the rolls above. The gamut fit reopens a film toward this and no further.
+        healthy_spread: #{format('%.3f', healthy_spread)}
+      YAML
     end
   end
 end

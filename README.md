@@ -56,10 +56,25 @@ Some useful options:
 | `--overrides FILE` | Load per-frame settings from YAML, keyed by filename without its extension. |
 | `--convert-only` | Just change the file format, no correction. No profile needed. |
 | `--crop` | Remove the film borders. They stay by default. |
+| `--match DIR` | Balance toward a roll that already looks right. See below. |
 
 By default, image processing uses all CPU cores. Command-line settings override
 the profile. Run `bundle exec ./bin/filmscan --help` for the full list, including
 colour, contrast and grain controls.
+
+## Matching another roll
+
+The profiles balance each film toward FujiFilm Superia in general. If you shot
+another roll the same day that the lab scanned well, you can match that instead:
+
+```sh
+bundle exec ./bin/filmscan --profile harman-phoenix-200 \
+  --match ~/scans/fuji-same-day ~/scans/phoenix-roll
+```
+
+Give `--match` once for each roll. It works best when both rolls saw the same
+kind of light and subjects. The measured reference is saved as
+`match-reference.yml` in the output folder and reused on the next run.
 
 ## Output formats
 

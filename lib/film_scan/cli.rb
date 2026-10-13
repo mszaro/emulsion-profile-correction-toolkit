@@ -90,6 +90,13 @@ module FilmScan
         return 1
       end
 
+      begin
+        reference = matched_reference(options[:match], destination) if options[:match] && !convert
+      rescue ArgumentError => e
+        warn e.message
+        return 1
+      end
+
       return explain(source, reference, options) if options[:explain] || options[:audit]
 
       FileUtils.mkdir_p(destination)
@@ -148,6 +155,37 @@ module FilmScan
     # and the strengths put on the raw fits after they are loaded.
     NOT_IN_FITS = %i[out only threads gentle previews contact_sheet format quality bits overrides
                      explain audit convert_only profile roll_tone roll_fit flat_field].freeze
+
+    MATCH_FILE = "match-reference.yml"
+
+    # A reference measured from rolls already corrected the way they should
+    # look, such as a film the lab scanned well on the same day, in place of
+    # the profile's. Kept beside the output and measured again only when those
+    # rolls or the measuring code change.
+    def matched_reference(dirs, destination)
+      rolls = dirs.to_h do |dir|
+        dir = File.expand_path(dir)
+        raise ArgumentError, "not a directory: #{dir}" unless File.directory?(dir)
+
+        [File.basename(dir), find_files(dir, nil)]
+      end
+      key = AnalysisCache.key(rolls.values.flatten, match: rolls.keys)
+      path = File.join(destination, MATCH_FILE)
+      if File.exist?(path)
+        data = YAML.safe_load(File.read(path), permitted_classes: [], aliases: false)
+        if data.is_a?(Hash) && data["key"] == key
+          puts "matching #{rolls.keys.join(' and ')}, as measured before"
+          return Reference.load(path)
+        end
+      end
+
+      puts "measuring #{rolls.keys.join(' and ')} to match..."
+      reference = Reference.measure(rolls, id: "match", name: rolls.keys.join(" and "))
+      FileUtils.mkdir_p(destination)
+      comment = "Measured by --match from:\n" + rolls.keys.map { |roll| "  #{roll}" }.join("\n")
+      File.write(path, "#{reference.to_yaml(comment)}\nkey: #{key}\n")
+      reference
+    end
 
     # The roll is fitted once, across every frame, before any frame is written:
     # first the colour balance toward the reference, then the tone curve and
@@ -600,6 +638,10 @@ module FilmScan
         opts.on("--reference NAME",
                 "Film to balance the roll toward: #{Reference.available.join(', ')},",
                 "or a file from tools/measure_reference.rb.") { |v| options[:reference] = v }
+        opts.on("--match DIR",
+                "Balance toward a roll that already looks right, such as one",
+                "shot the same day on a film the lab scanned well, in place of",
+                "the profile's reference. Give it once for each roll.") { |v| (options[:match] ||= []) << v }
         opts.on("--roll-balance FLOAT", Float,
                 "Strength of the balance toward the reference, 0 to 1",
                 "(default #{DEFAULTS[:roll_balance]}). Only with a reference.") { |v| options[:roll_balance] = v }
