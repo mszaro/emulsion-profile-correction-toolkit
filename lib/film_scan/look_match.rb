@@ -23,6 +23,8 @@ module FilmScan
     # dark rendering: a church interior or a night street keeps its own look.
     # The match eases in between the two and is whole above the second.
     LOW_KEY = [15.0, 35.0].freeze
+    # A pixel the sky detector weighs above this is left out of the fit.
+    SKY = 0.3
 
     attr_reader :lightness, :offsets, :spread, :strength
 
@@ -38,15 +40,24 @@ module FilmScan
 
         [1, 2].map { |c| mean(to, c) - spread * mean(from, c) }
       end
-      new(lightness: lightness, offsets: fill(offsets), spread: spread)
+      averages = BANDS.map do |centre|
+        from = in_band(film, centre)
+        from.size < MIN_BAND ? nil : [mean(from, 1), mean(from, 2)]
+      end
+      new(lightness: lightness, offsets: fill(offsets), spread: spread, film: fill(averages))
     end
 
     # Lab pixels from a float sRGB image, about count of them, and fewer from
-    # a frame dark enough that the match mostly leaves it alone.
-    def self.pixels(srgb, count = PER_FRAME, weighted: true)
+    # a frame dark enough that the match mostly leaves it alone. Pixels the
+    # skip mask marks, a sky, are left out: a clear blue sky over one roll and
+    # a pale one over the other say nothing about how either film renders.
+    def self.pixels(srgb, count = PER_FRAME, weighted: true, skip: nil)
       scale = Math.sqrt(count.to_f / (srgb.width * srgb.height))
       small = scale < 1.0 ? srgb.resize(scale) : srgb
-      pixels = lab_of(small).write_to_memory.unpack("f*").each_slice(3).to_a
+      lab = lab_of(small)
+      lab = lab.bandjoin((scale < 1.0 ? skip.resize(scale) : skip).cast(:float)) if skip
+      pixels = lab.write_to_memory.unpack("f*").each_slice(skip ? 4 : 3).to_a
+      pixels = pixels.reject { |px| px[3] > SKY }.map { |px| px.first(3) } if skip
       return pixels unless weighted
 
       keep = (pixels.size * key_weight(median_of(pixels))).round
@@ -75,7 +86,7 @@ module FilmScan
     end
 
     def self.from_cache(data)
-      new(lightness: data[:lightness], offsets: data[:offsets], spread: data[:spread])
+      new(lightness: data[:lightness], offsets: data[:offsets], spread: data[:spread], film: data[:film])
     end
 
     def self.quantiles(values)
@@ -111,8 +122,9 @@ module FilmScan
       offsets.each_index.map { |i| offsets[known.min_by { |k| (k - i).abs }].dup }
     end
 
-    def initialize(lightness:, offsets:, spread:)
+    def initialize(lightness:, offsets:, spread:, film: nil)
       @lightness = lightness
+      @film = film
       @offsets = offsets
       @spread = spread
       @strength = 1.0
@@ -147,13 +159,17 @@ module FilmScan
     def to_h
       # Copies, so a shared row is never written as a YAML alias, which the
       # cache refuses to read.
-      { "lightness" => @lightness.map(&:dup), "offsets" => @offsets.map(&:dup), "spread" => @spread }
+      { "lightness" => @lightness.map(&:dup), "offsets" => @offsets.map(&:dup), "spread" => @spread,
+        "film" => @film&.map(&:dup) }.compact
     end
 
     def report
       median = @lightness[@lightness.size / 2]
-      mid = @offsets[BANDS.index(55)]
-      format("  matching the look: median lightness %.0f -> %.0f, midtone colour a* %+.1f b* %+.1f, " \
+      # How far the midtones' average colour moves, which is the offset less
+      # what the colourfulness scale already did to the film's average.
+      band = BANDS.index(55)
+      mid = @offsets[band].each_with_index.map { |offset, c| offset + (@spread - 1.0) * (@film ? @film[band][c] : 0.0) }
+      format("  matching the look: median lightness %.0f -> %.0f, midtones move a* %+.1f b* %+.1f, " \
              "colourfulness x%.2f, at %.0f%% strength; frames darker than L* %.0f at their " \
              "median keep their own look", *median, *mid, @spread, @strength * 100, LOW_KEY[0])
     end

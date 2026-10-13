@@ -294,21 +294,23 @@ module FilmScan
     LOOK_FRAMES = 12
 
     # The corrected roll's finished look against the look of the rolls it
-    # matches, each read inside the picture. Every matched roll counts the
-    # same, however many frames it has.
+    # matches, each read inside the picture and below the sky, so buildings
+    # are compared with buildings. Every matched roll counts the same, however
+    # many frames it has.
     def match_look(paths, options, fits, reference)
       film = spread(paths).flat_map do |path|
         rendered = Pipeline.new(options.merge(crop: true), reference: reference, **fits.except(:look))
                            .render(small(path))
-        LookMatch.pixels(rendered.copy_memory)
+        rendered = rendered.copy_memory
+        LookMatch.pixels(rendered, skip: Sky.mask(rendered))
       end
       target = @match_rolls.values.flat_map do |frames|
         picked = spread(frames)
         picked.flat_map do |path|
           image = small(path)
           area = FrameEdges.detect(image).picture
-          LookMatch.pixels(area ? image.extract_area(*area) : image,
-                           LookMatch::PER_FRAME * LOOK_FRAMES / picked.size)
+          image = image.extract_area(*area).copy_memory if area
+          LookMatch.pixels(image, LookMatch::PER_FRAME * LOOK_FRAMES / picked.size, skip: Sky.mask(image))
         end
       end
       LookMatch.fit(film, target)

@@ -63,6 +63,16 @@ class LookMatchTest < Minitest::Test
     assert_equal 0.0, (look.apply(frame) - frame).abs.max
   end
 
+  # A sky says nothing about how either film renders, so the pixels the sky
+  # mask marks are left out of the fit.
+  def test_leaves_out_what_the_skip_mask_marks
+    frame = srgb_from(Array.new(300) { [80.0, -5.0, -30.0] } + Array.new(300) { [50.0, 0.0, 12.0] })
+    sky = Vips::Image.black(100, 6).draw_rect(1.0, 0, 0, 100, 3, fill: true).cast(:float)
+    kept = FilmScan::LookMatch.pixels(frame, 600, weighted: false, skip: sky)
+    assert_equal 300, kept.size
+    assert(kept.all? { |l, _, _| (l - 50).abs < 1 }, "only the ground should be left")
+  end
+
   def test_survives_the_cache
     film = lab_pixels(-10, 12)
     look = FilmScan::LookMatch.fit(film, lab_pixels(5, -3, seed: 2))
