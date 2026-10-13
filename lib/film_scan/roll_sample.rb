@@ -26,8 +26,11 @@ module FilmScan
         image = Vips::Image.new_from_file(path, access: :random)
         image = image.bandjoin([image, image]) if image.bands == 1
         image = image[0..2] if image.bands > 3
+        # An eight bit scan cannot read past 255, so only a deeper one is read
+        # through to find out.
+        deep = image.format != :uchar
         image = image.cast(:float)
-        image /= 257.0 if image.max > 256
+        image /= 257.0 if deep && image.max > 256
         area = crop&.call(image / 255.0)
         image = image.extract_area(*area) if area
 
