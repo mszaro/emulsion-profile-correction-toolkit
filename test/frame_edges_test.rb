@@ -7,7 +7,7 @@ class FrameEdgesTest < Minitest::Test
   # Levels are given the way a scan reads them, in 0..255, and converted back
   # to the linear light the test images are built in.
   def linear(level)
-    Emulsion::Colour.srgb_to_linear_scalar(level / 255.0)
+    FilmScan::Colour.srgb_to_linear_scalar(level / 255.0)
   end
 
   # A scan the way a full frame scanner leaves it: bright overscan outside the
@@ -30,7 +30,7 @@ class FrameEdgesTest < Minitest::Test
   end
 
   def test_finds_the_rebate_and_reads_its_colour
-    edges = Emulsion::FrameEdges.detect(scan_with_border)
+    edges = FilmScan::FrameEdges.detect(scan_with_border)
     assert edges.found?, "the rebate should be found on a full frame scan"
     floor = edges.floor
     [4, 26, 15].each_with_index do |level, channel|
@@ -41,7 +41,7 @@ class FrameEdgesTest < Minitest::Test
   end
 
   def test_crops_to_the_picture
-    left, top, width, height = Emulsion::FrameEdges.detect(scan_with_border(border: 16)).picture
+    left, top, width, height = FilmScan::FrameEdges.detect(scan_with_border(border: 16)).picture
     assert_operator left, :>=, 12
     assert_operator top, :>=, 12
     assert_operator left + width, :<=, WIDTH - 12
@@ -51,7 +51,7 @@ class FrameEdgesTest < Minitest::Test
   # A lab that crops to the picture leaves nothing to find, and the toolkit
   # has to carry on as before.
   def test_a_cropped_scan_has_no_border
-    edges = Emulsion::FrameEdges.detect(scan_with_border(border: 0))
+    edges = FilmScan::FrameEdges.detect(scan_with_border(border: 0))
     refute edges.found?
     assert_nil edges.picture
     assert_nil edges.floor
@@ -60,14 +60,14 @@ class FrameEdgesTest < Minitest::Test
 
   # One dark even edge is a shadow in the picture until another side agrees.
   def test_one_dark_side_is_not_a_border
-    edges = Emulsion::FrameEdges.detect(scan_with_border(sides: %i[left]))
+    edges = FilmScan::FrameEdges.detect(scan_with_border(sides: %i[left]))
     refute edges.found?
     assert_nil edges.floor
   end
 
   def test_a_border_deeper_than_the_cap_is_never_cropped
-    deep = (WIDTH * Emulsion::FrameEdges::MAX_CROP).to_i + 12
-    left, = Emulsion::FrameEdges.detect(scan_with_border(border: deep)).picture
+    deep = (WIDTH * FilmScan::FrameEdges::MAX_CROP).to_i + 12
+    left, = FilmScan::FrameEdges.detect(scan_with_border(border: deep)).picture
     assert_equal 0, left, "a crop past the cap should be refused rather than eat the picture"
   end
 
@@ -75,7 +75,7 @@ class FrameEdgesTest < Minitest::Test
   # opposite it is the same width, so the crop borrows from there rather than
   # leaving the fogged strip in the picture.
   def test_a_side_with_no_rebate_borrows_from_the_side_opposite
-    edges = Emulsion::FrameEdges.detect(scan_with_border(border: 20, sides: %i[left right bottom]))
+    edges = FilmScan::FrameEdges.detect(scan_with_border(border: 20, sides: %i[left right bottom]))
     area = edges.picture
     refute_nil area
     assert_operator area[1], :>, 0, "the top is cropped by the width the bottom found"
@@ -90,8 +90,8 @@ class FrameEdgesTest < Minitest::Test
   def test_the_same_scan_reads_the_same_at_any_size
     small = scan_with_border(border: 20)
     large = small.resize(4)
-    found = Emulsion::FrameEdges.detect(small).picture
-    grown = Emulsion::FrameEdges.detect(large).picture
+    found = FilmScan::FrameEdges.detect(small).picture
+    grown = FilmScan::FrameEdges.detect(large).picture
     refute_nil found
     refute_nil grown
     found.each_with_index { |value, i| assert_in_delta value * 4, grown[i], 12, "edge #{i}" }

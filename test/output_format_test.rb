@@ -2,7 +2,7 @@ require_relative "test_helper"
 
 class OutputFormatTest < Minitest::Test
   def setup
-    @cli = Emulsion::CLI.new
+    @cli = FilmScan::CLI.new
     @frame = TestImages.linear_image(64, 48) do |x, y|
       shade = 0.02 + 0.9 * (x / 63.0)
       [shade, shade * 0.95, shade * 0.9 + y / 480.0]
@@ -11,8 +11,8 @@ class OutputFormatTest < Minitest::Test
 
   def save(format, bits: 16, quality: 98)
     Dir.mktmpdir do |dir|
-      path = File.join(dir, "frame#{Emulsion::CLI::FORMATS.fetch(format)}")
-      @cli.send(:save, @frame, path, format, Emulsion::DEFAULTS.merge(bits: bits, quality: quality))
+      path = File.join(dir, "frame#{FilmScan::CLI::FORMATS.fetch(format)}")
+      @cli.send(:save, @frame, path, format, FilmScan::DEFAULTS.merge(bits: bits, quality: quality))
       yield Vips::Image.new_from_file(path), File.size(path)
     end
   end

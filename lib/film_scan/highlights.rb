@@ -1,4 +1,4 @@
-module Emulsion
+module FilmScan
   # What to do when a gain would push a channel past white.
   #
   # Lucky's sky arrives with its blue below its green, and the correction

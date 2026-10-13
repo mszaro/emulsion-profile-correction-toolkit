@@ -1,4 +1,4 @@
-module Emulsion
+module FilmScan
   # A film's colour bent onto a reference film's, beyond what per-channel
   # gains can reach.
   #

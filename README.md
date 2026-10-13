@@ -1,4 +1,4 @@
-# Emulsion Profile Correction Toolkit
+# Film Scan Correction Toolkit
 
 A command-line tool for fixing colour casts, flat contrast and colour noise in
 lab scans of colour negative film.
@@ -23,7 +23,7 @@ bundle install
 Put the scans from one roll in a folder and choose a film profile:
 
 ```sh
-bundle exec ./bin/emulsion --profile lomochrome-color-92 ~/scans/my-roll
+bundle exec ./bin/filmscan --profile lomochrome-color-92 ~/scans/my-roll
 ```
 
 It reads TIFF, JPEG and PNG files. Corrected copies go to
@@ -34,7 +34,7 @@ with the settings used for the run.
 For previews and a contact sheet:
 
 ```sh
-bundle exec ./bin/emulsion --profile lomochrome-color-92 \
+bundle exec ./bin/filmscan --profile lomochrome-color-92 \
   --previews --contact-sheet --gentle ~/scans/my-roll
 ```
 
@@ -53,7 +53,7 @@ Some useful options:
 | `--overrides FILE` | Load per-frame settings from YAML, keyed by filename without its extension. |
 
 By default, image processing uses all CPU cores. Command-line settings override
-the profile. Run `bundle exec ./bin/emulsion --help` for the full list, including
+the profile. Run `bundle exec ./bin/filmscan --help` for the full list, including
 colour, contrast and grain controls.
 
 ## Output formats
@@ -61,7 +61,7 @@ colour, contrast and grain controls.
 Use `--format` to choose `tiff`, `jpeg`, `png`, `heic` or `jp2`:
 
 ```sh
-bundle exec ./bin/emulsion --profile lucky-shd-400 \
+bundle exec ./bin/filmscan --profile lucky-shd-400 \
   --format tiff --bits 16 ~/scans/my-roll
 ```
 
@@ -82,7 +82,7 @@ The film profiles handle colour and tone. Use `--fix` to also crop scan borders,
 recover shadows and highlights, or sharpen soft frames:
 
 ```sh
-bundle exec ./bin/emulsion --profile lucky-shd-400 \
+bundle exec ./bin/filmscan --profile lucky-shd-400 \
   --fix crop,shadows ~/scans/my-roll
 ```
 
@@ -143,7 +143,7 @@ Profiles are YAML files in [profiles/](profiles/). To try another film, copy an
 existing profile, adjust its settings and pass the file path:
 
 ```sh
-bundle exec ./bin/emulsion --profile ./my-film.yml ~/scans/my-roll
+bundle exec ./bin/filmscan --profile ./my-film.yml ~/scans/my-roll
 ```
 
 The bundled profiles use [Fujifilm Superia](references/fujifilm-superia.yml) as

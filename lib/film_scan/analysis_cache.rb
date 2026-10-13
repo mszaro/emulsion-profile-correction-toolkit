@@ -1,7 +1,7 @@
 require "yaml"
 require "digest"
 
-module Emulsion
+module FilmScan
   # Remembers a roll's fits, kept next to the output as roll-fit.yml.
   #
   # The key covers everything the fits depend on: each source file's path, size

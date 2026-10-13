@@ -1,8 +1,8 @@
 require_relative "test_helper"
-require_relative "../lib/emulsion/dynamics"
+require_relative "../lib/film_scan/dynamics"
 
 class DynamicsTest < Minitest::Test
-  D = Emulsion::Dynamics
+  D = FilmScan::Dynamics
 
   # TestImages describes a frame in linear light. These frames are easier to
   # write down as the display values a scan actually holds, and anything over
@@ -10,7 +10,7 @@ class DynamicsTest < Minitest::Test
   # the frame is read back point by point.
   def display_image(width, height)
     TestImages.linear_image(width, height) do |x, y|
-      yield(x, y).map { |v| Emulsion::Colour.srgb_to_linear_scalar([v, 1.0].min) }
+      yield(x, y).map { |v| FilmScan::Colour.srgb_to_linear_scalar([v, 1.0].min) }
     end.copy_memory
   end
 

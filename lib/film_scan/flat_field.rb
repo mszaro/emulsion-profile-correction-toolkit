@@ -1,4 +1,4 @@
-module Emulsion
+module FilmScan
   # The dark corners a camera and a scanner leave on every frame.
   #
   # One frame cannot tell a dark corner from a dark subject, but a roll can:

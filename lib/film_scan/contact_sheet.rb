@@ -1,4 +1,4 @@
-module Emulsion
+module FilmScan
   # A sheet of every frame in a roll, named, for looking over the whole roll
   # at once. Built from the frames as they are corrected, so it costs a
   # thumbnail each rather than a second pass over the output.

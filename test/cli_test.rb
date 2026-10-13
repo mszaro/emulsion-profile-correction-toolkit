@@ -15,7 +15,7 @@ class CLITest < Minitest::Test
 
   def run_cli(*args)
     status = nil
-    out, = capture_io { status = Emulsion::CLI.run(args) }
+    out, = capture_io { status = FilmScan::CLI.run(args) }
     [status, out]
   end
 
@@ -46,7 +46,7 @@ class CLITest < Minitest::Test
       write_roll(dir, frames: 1)
       status = nil
       _, err = capture_io do
-        status = Emulsion::CLI.run(["--profile", "lucky-shd-400", "--reference", "nope",
+        status = FilmScan::CLI.run(["--profile", "lucky-shd-400", "--reference", "nope",
                                     "--out", File.join(dir, "out"), dir])
       end
       assert_equal 1, status

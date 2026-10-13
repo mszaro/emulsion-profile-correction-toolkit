@@ -1,6 +1,6 @@
 require "yaml"
 
-module Emulsion
+module FilmScan
   # How a film scanned with the right profile renders neutral surfaces at each
   # tone, and where its tones fall. A film the scanner got wrong is balanced
   # toward one of these, loaded by name from references/ or from a file

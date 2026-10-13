@@ -1,4 +1,4 @@
-module Emulsion
+module FilmScan
   # Everything the pipeline needs to know about a frame before it touches it,
   # measured on a sample of its pixels rather than all 25 million.
   class Measurements

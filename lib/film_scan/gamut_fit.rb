@@ -1,4 +1,4 @@
-module Emulsion
+module FilmScan
   # Solves for the per-channel curves that reopen a roll's collapsed colour.
   #
   # A roll of varied scenes holds colour in every direction. A scan that has

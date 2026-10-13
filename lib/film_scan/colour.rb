@@ -1,4 +1,4 @@
-module Emulsion
+module FilmScan
   # sRGB transfer curves, written out rather than using colourspace(:srgb).
   #
   # libvips treats sRGB as 8-bit, which would round these 0..1 floats in the

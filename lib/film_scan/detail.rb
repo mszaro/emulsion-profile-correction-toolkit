@@ -1,4 +1,4 @@
-module Emulsion
+module FilmScan
   # How sharp a frame really is under its grain, and the sharpening that earns
   # its place.
   #

@@ -2,7 +2,7 @@ require_relative "test_helper"
 
 class PipelineVetoesTest < Minitest::Test
   def pipeline(**options)
-    Emulsion::Pipeline.new(Emulsion::DEFAULTS.merge(contrast: 0.2, max_stretch: 3.0).merge(options))
+    FilmScan::Pipeline.new(FilmScan::DEFAULTS.merge(contrast: 0.2, max_stretch: 3.0).merge(options))
   end
 
   # A frame that needed the whole stretch it was allowed keeps half its
@@ -47,11 +47,11 @@ class PipelineVetoesTest < Minitest::Test
     level = [0.01, 0.03, 0.08, 0.2, 0.45][((x / 10) + (y / 10)) % 5]
     [level, level, level * 2**-0.8]
   end
-  reference = Emulsion::Reference.load("fujifilm-superia")
-  options = Emulsion::DEFAULTS.merge(reference: "fujifilm-superia", frame_balance: 1.0,
+  reference = FilmScan::Reference.load("fujifilm-superia")
+  options = FilmScan::DEFAULTS.merge(reference: "fujifilm-superia", frame_balance: 1.0,
                                      frame_balance_limit: 2.5, highlight_headroom: 1.5)
-  balanced = Emulsion::Pipeline.new(options, reference: reference).send(:balance, frame)
-  sky = ->(im) { TestImages.mean_pixel(im, 20, 5, 160, 30).zip(Emulsion::Pipeline::LUMA).sum { |v, w| v * w } }
+  balanced = FilmScan::Pipeline.new(options, reference: reference).send(:balance, frame)
+  sky = ->(im) { TestImages.mean_pixel(im, 20, 5, 160, 30).zip(FilmScan::Pipeline::LUMA).sum { |v, w| v * w } }
   assert_operator sky.(balanced), :>=, sky.(frame) - 0.01, "the sky should keep its brightness"
   end
 
@@ -62,11 +62,11 @@ class PipelineVetoesTest < Minitest::Test
     frame = TestImages.linear_image(200, 150) do |x, y|
       x.between?(80, 120) && y.between?(50, 90) ? [0.6, 0.42, 0.03] : [0.002, 0.002, 0.002]
     end
-    reference = Emulsion::Reference.load("fujifilm-superia")
-    assert_nil Emulsion::ColourBalance.fit_frame(frame, reference.neutral)
-    options = Emulsion::DEFAULTS.merge(reference: "fujifilm-superia", frame_balance: 1.0,
+    reference = FilmScan::Reference.load("fujifilm-superia")
+    assert_nil FilmScan::ColourBalance.fit_frame(frame, reference.neutral)
+    options = FilmScan::DEFAULTS.merge(reference: "fujifilm-superia", frame_balance: 1.0,
                                        frame_balance_limit: 2.5, lost_colour: 1.0)
-    shaped = Emulsion::Pipeline.new(options, reference: reference).send(:balance, frame)
+    shaped = FilmScan::Pipeline.new(options, reference: reference).send(:balance, frame)
     assert_operator (shaped - frame).abs.max, :<, 1e-6
   end
 end

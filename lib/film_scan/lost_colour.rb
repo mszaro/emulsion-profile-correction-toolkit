@@ -1,4 +1,4 @@
-module Emulsion
+module FilmScan
   # What to render where a channel has nothing left to say.
   #
   # Lucky's blue layer records almost nothing on warm subjects in warm light:

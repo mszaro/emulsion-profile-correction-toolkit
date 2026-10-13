@@ -20,7 +20,7 @@ class ChromaMapTest < Minitest::Test
   def test_fit_finds_the_stretch_between_two_clouds
     film = cloud(centre: [0.4, -1.2], spread: [0.5, 1.2])
     reference = cloud(centre: [-0.2, 0.1], spread: [0.5, 0.6], seed: 9)
-    map = Emulsion::ChromaMap.fit(film, reference, [0.0, 0.0])
+    map = FilmScan::ChromaMap.fit(film, reference, [0.0, 0.0])
     refute_nil map
     assert_operator map.matrix[1], :<, 0.9, "blue spread should be pulled in"
   end
@@ -31,29 +31,29 @@ class ChromaMapTest < Minitest::Test
     grey = [0.05, -0.12]
     film = cloud(centre: [0.4, -1.2], spread: [0.5, 1.2])
     reference = cloud(centre: [-0.2, 0.1], spread: [0.8, 0.6], seed: 9)
-    map = Emulsion::ChromaMap.fit(film, reference, grey)
+    map = FilmScan::ChromaMap.fit(film, reference, grey)
     (0..1).each { |axis| assert_in_delta grey[axis], grey[axis] * map.matrix[axis] + map.offset[axis], 1e-9 }
   end
 
   def test_grey_is_the_reference_neutral_across_the_fitted_tones
     neutral = Array.new(8) { |i| [i * 0.1, -i * 0.1] }
-    assert_equal [0.4, -0.4], Emulsion::ChromaMap.grey_of(neutral).map { |v| v.round(9) }
+    assert_equal [0.4, -0.4], FilmScan::ChromaMap.grey_of(neutral).map { |v| v.round(9) }
   end
 
   def test_too_few_pixels_fits_nothing
-    assert_nil Emulsion::ChromaMap.fit(cloud(centre: [0, 0], spread: [0.2, 0.2], count: 100),
+    assert_nil FilmScan::ChromaMap.fit(cloud(centre: [0, 0], spread: [0.2, 0.2], count: 100),
                                        cloud(centre: [0, 0], spread: [0.2, 0.2], count: 100), [0.0, 0.0])
   end
 
   def test_zero_strength_changes_nothing
-    map = Emulsion::ChromaMap.new([0.6, 0.6], [0.3, 0.4])
+    map = FilmScan::ChromaMap.new([0.6, 0.6], [0.3, 0.4])
     map.strength = 0.0
     frame = TestImages.linear_image(32, 32) { |x, _| [0.3 * 1.4, 0.3, 0.3 * 0.4] }
     assert_operator (map.apply(frame) - frame).abs.max, :<, 1e-6
   end
 
   def test_it_moves_colour_toward_the_reference
-    map = Emulsion::ChromaMap.new([0.6, 0.6], [0.0, 0.4])
+    map = FilmScan::ChromaMap.new([0.6, 0.6], [0.0, 0.4])
     frame = TestImages.linear_image(32, 32) { |_x, _y| [0.3 * 1.4, 0.3, 0.3 * 2**-2.0] }
     before = TestImages.stops(TestImages.mean_pixel(frame, 4, 4, 24, 24))
     after = TestImages.stops(TestImages.mean_pixel(map.apply(frame), 4, 4, 24, 24))
@@ -63,7 +63,7 @@ class ChromaMapTest < Minitest::Test
 
   # Reshaping colour that was never recorded only makes a louder wrong answer.
   def test_it_steps_aside_where_blue_is_gone
-    map = Emulsion::ChromaMap.new([0.6, 0.6], [0.0, 0.4])
+    map = FilmScan::ChromaMap.new([0.6, 0.6], [0.0, 0.4])
     frame = TestImages.linear_image(32, 32) { |_x, _y| [0.3 * 1.4, 0.3, 0.3 * 2**-4.0] }
     lost = weight(1.0)
     assert_operator (map.apply(frame, lost) - frame).abs.max, :<, 2e-3

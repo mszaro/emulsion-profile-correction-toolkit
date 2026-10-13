@@ -1,4 +1,4 @@
-module Emulsion
+module FilmScan
   # The roll-wide tone correction for films the scanner had no profile for.
   #
   # A wrong profile can bunch a film's tones as well as tint them: Phoenix

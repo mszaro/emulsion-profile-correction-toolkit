@@ -1,4 +1,4 @@
-module Emulsion
+module FilmScan
   # What a scanner leaves around the picture, when it leaves anything.
   #
   # A full frame scan runs wider than the film, so each side reads outward as

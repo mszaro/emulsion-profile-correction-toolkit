@@ -1,4 +1,4 @@
-module Emulsion
+module FilmScan
   # Where the sky is, so that the neutral estimate can stop treating it as a
   # grey card.
   #

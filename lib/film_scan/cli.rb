@@ -3,7 +3,7 @@ require "fileutils"
 require "yaml"
 require "etc"
 
-module Emulsion
+module FilmScan
   # Command line front end. Corrects every scan in a folder and writes the
   # results to a sibling folder, leaving the originals untouched.
   class CLI
@@ -439,7 +439,7 @@ module Emulsion
         opts.banner = <<~BANNER
           Correct lab scans of film stocks the scanner had no profile for.
 
-          Usage: emulsion --profile NAME [options] SOURCE_DIR
+          Usage: filmscan --profile NAME [options] SOURCE_DIR
 
           Writes corrected frames to "SOURCE_DIR - corrected", in the same format
           they came in as. Originals are never modified. The profile sets the
@@ -595,7 +595,7 @@ module Emulsion
           exit 0
         end
         opts.on("-v", "--version", "Show version.") do
-          puts Emulsion::VERSION
+          puts FilmScan::VERSION
           exit 0
         end
       end

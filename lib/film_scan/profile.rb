@@ -1,6 +1,6 @@
 require "yaml"
 
-module Emulsion
+module FilmScan
   # Everything the toolkit knows about one film stock: the settings that shape
   # the picture, tuned for how that film's scans go wrong. Loaded by name from
   # profiles/, or from any YAML file with the same keys.

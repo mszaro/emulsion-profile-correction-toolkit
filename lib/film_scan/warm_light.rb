@@ -1,4 +1,4 @@
-module Emulsion
+module FilmScan
   # Light that is warm on purpose. The frame balance reads lamps, dusk and
   # low sun as a cast like any other and takes them out.
   #

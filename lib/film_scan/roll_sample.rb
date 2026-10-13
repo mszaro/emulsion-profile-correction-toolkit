@@ -1,4 +1,4 @@
-module Emulsion
+module FilmScan
   # A few thousand pixels from every frame in a roll, for the roll-wide fits.
   #
   # Taken by stride rather than by scaling down, since scaling averages

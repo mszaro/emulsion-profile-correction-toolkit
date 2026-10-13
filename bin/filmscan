@@ -1,0 +1,5 @@
+#!/usr/bin/env ruby
+require_relative "../lib/film_scan"
+require_relative "../lib/film_scan/cli"
+
+exit FilmScan::CLI.run(ARGV)

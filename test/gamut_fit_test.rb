@@ -17,25 +17,25 @@ class GamutFitTest < Minitest::Test
       b << (level + reach * Math.sin(angle)).clamp(1.0, 254.0)
     end
     y = r.each_index.map { |i| 0.2126 * r[i] + 0.7152 * g[i] + 0.0722 * b[i] }
-    Emulsion::RollSample::Pixels.new(r: r, g: g, b: b, y: y, frame_sizes: [count])
+    FilmScan::RollSample::Pixels.new(r: r, g: g, b: b, y: y, frame_sizes: [count])
   end
 
   # The reference must be a no op: a roll already as spread as healthy looks
   # has nothing to reopen.
   def test_a_roll_at_the_healthy_spread_is_left_alone
     roll = sample
-    spread = Emulsion::GamutFit.new(roll, healthy_spread: 0.0, verbose: false).spread_before
-    fit = Emulsion::GamutFit.new(roll, healthy_spread: spread, verbose: false)
+    spread = FilmScan::GamutFit.new(roll, healthy_spread: 0.0, verbose: false).spread_before
+    fit = FilmScan::GamutFit.new(roll, healthy_spread: spread, verbose: false)
     fit.gains.flatten.each { |gain| assert_in_delta 1.0, gain, 0.02 }
   end
 
   def test_a_squashed_roll_is_reopened_toward_the_healthy_spread
-    fit = Emulsion::GamutFit.new(sample(hues: Math::PI / 2), healthy_spread: 0.9, verbose: false)
+    fit = FilmScan::GamutFit.new(sample(hues: Math::PI / 2), healthy_spread: 0.9, verbose: false)
     assert_operator fit.spread_after, :>, fit.spread_before
   end
 
   def test_the_reference_carries_a_healthy_spread
-    reference = Emulsion::Reference.load("fujifilm-superia")
+    reference = FilmScan::Reference.load("fujifilm-superia")
     refute_nil reference.healthy_spread
     assert_operator reference.healthy_spread, :>, 0.2
     assert_operator reference.healthy_spread, :<, 0.9

@@ -7,8 +7,8 @@
 #   measure_shape.rb PROFILE --reference REF_DIR[,REF_DIR...] ROLL_DIR [ROLL_DIR ...]
 
 require "json"
-require_relative "../lib/emulsion"
-require_relative "../lib/emulsion/cli"
+require_relative "../lib/film_scan"
+require_relative "../lib/film_scan/cli"
 
 name = ARGV.shift
 reference_dirs = []
@@ -25,9 +25,9 @@ if name.nil? || dirs.empty? || reference_dirs.empty?
   exit 1
 end
 
-profile = Emulsion::Profile.load(name)
-reference = Emulsion::Reference.load(profile.settings[:reference] || abort("profile names no reference"))
-exts = Emulsion::CLI::EXTENSIONS.join(",")
+profile = FilmScan::Profile.load(name)
+reference = FilmScan::Reference.load(profile.settings[:reference] || abort("profile names no reference"))
+exts = FilmScan::CLI::EXTENSIONS.join(",")
 
 # The film, corrected the way the pipeline corrects it before anything here.
 def pixels_of(dirs, exts, film_gains, target)
@@ -36,13 +36,13 @@ def pixels_of(dirs, exts, film_gains, target)
     abort "no images in #{dir}" if paths.empty?
 
     puts File.basename(dir)
-    sample = Emulsion::RollSample.collect(paths) { |image| Emulsion::FrameEdges.detect(image).picture }
-    offsets = Emulsion::ColourBalance.black_offsets(sample)
-    pixels = Emulsion::ColourBalance.linear_pixels(sample, offsets)
+    sample = FilmScan::RollSample.collect(paths) { |image| FilmScan::FrameEdges.detect(image).picture }
+    offsets = FilmScan::ColourBalance.black_offsets(sample)
+    pixels = FilmScan::ColourBalance.linear_pixels(sample, offsets)
     next pixels unless film_gains
 
-    balance = Emulsion::ColourBalance.fit_roll(sample, target, film: film_gains)
-    Emulsion::ColourBalance.linear_pixels(balance.apply_to_sample(sample), [0, 0, 0])
+    balance = FilmScan::ColourBalance.fit_roll(sample, target, film: film_gains)
+    FilmScan::ColourBalance.linear_pixels(balance.apply_to_sample(sample), [0, 0, 0])
   end
 end
 
@@ -51,7 +51,7 @@ end
 # balance narrows how far colour spreads across a roll, and a spread from
 # one side without it would read as the film's own.
 def balanced_pixels(dirs, exts, settings, reference)
-  options = Emulsion::DEFAULTS.merge(settings).merge(fix: %i[crop floor], chroma_shape: 0.0, lost_colour: 0.0)
+  options = FilmScan::DEFAULTS.merge(settings).merge(fix: %i[crop floor], chroma_shape: 0.0, lost_colour: 0.0)
   dirs.flat_map do |dir|
     paths = Dir.glob(File.join(File.expand_path(dir), "*.{#{exts}}")).uniq.sort
     abort "no images in #{dir}" if paths.empty?
@@ -59,17 +59,17 @@ def balanced_pixels(dirs, exts, settings, reference)
     puts File.basename(dir)
     balance = nil
     if settings[:film_gains]
-      sample = Emulsion::RollSample.collect(paths) { |image| Emulsion::FrameEdges.detect(image).picture }
-      balance = Emulsion::ColourBalance.fit_roll(sample, reference.neutral, film: settings[:film_gains])
+      sample = FilmScan::RollSample.collect(paths) { |image| FilmScan::FrameEdges.detect(image).picture }
+      balance = FilmScan::ColourBalance.fit_roll(sample, reference.neutral, film: settings[:film_gains])
       balance.strength = options[:roll_balance]
     end
     pixels = paths.each_with_index.flat_map do |path, i|
       print "\r  balancing #{i + 1}/#{paths.size}"
-      frame = Emulsion::Pipeline.new(options, balance: balance, reference: reference)
-                                .balanced(Emulsion::Colour.load(path))
+      frame = FilmScan::Pipeline.new(options, balance: balance, reference: reference)
+                                .balanced(FilmScan::Colour.load(path))
       # Every sixteenth of the frame balance's own sample: single pixels,
       # since averaging neighbours would narrow the spread.
-      frame ? Emulsion::ColourBalance.frame_pixels(frame).each_slice(16).map(&:first) : []
+      frame ? FilmScan::ColourBalance.frame_pixels(frame).each_slice(16).map(&:first) : []
     end
     puts
     pixels
@@ -83,7 +83,7 @@ else
   film = pixels_of(dirs, exts, profile.settings[:film_gains], reference.neutral)
   shot = pixels_of(reference_dirs, exts, nil, reference.neutral)
 end
-map = Emulsion::ChromaMap.fit(film, shot, Emulsion::ChromaMap.grey_of(reference.neutral)) or
+map = FilmScan::ChromaMap.fit(film, shot, FilmScan::ChromaMap.grey_of(reference.neutral)) or
   abort "too few pixels to measure a shape"
 puts map.report
 
@@ -98,7 +98,7 @@ block = <<~YAML
     offset: [#{map.offset.map { |v| format('%.4f', v) }.join(', ')}]
 YAML
 
-path = File.join(Emulsion::Profile::DIR, "#{profile.id}.yml")
+path = File.join(FilmScan::Profile::DIR, "#{profile.id}.yml")
 text = File.read(path)
 # One line per entry: under /m a dot also matches a newline, so .* would
 # run on to the end of the profile and take every setting after it.
@@ -110,7 +110,7 @@ text = if text.match?(existing)
        end
 abort "could not find where to put chroma_map in #{path}" unless text.include?("chroma_map:")
 # Checked before it is written, so a bad edit never leaves a broken profile.
-Emulsion::Profile.new(profile.id, YAML.safe_load(text, permitted_classes: [], aliases: false, symbolize_names: true))
+FilmScan::Profile.new(profile.id, YAML.safe_load(text, permitted_classes: [], aliases: false, symbolize_names: true))
 File.write(path, text)
-Emulsion::Profile.load(profile.id)
+FilmScan::Profile.load(profile.id)
 puts "wrote chroma_map to #{path}"

@@ -1,7 +1,7 @@
 require "minitest/autorun"
 require "tmpdir"
-require_relative "../lib/emulsion"
-require_relative "../lib/emulsion/cli"
+require_relative "../lib/film_scan"
+require_relative "../lib/film_scan/cli"
 
 module TestImages
   module_function
@@ -17,7 +17,7 @@ module TestImages
     # over a Ruby string lost its hold on that string somewhere down a chain of
     # operations, and when the collector freed it the pipeline read garbage:
     # an average came back NaN in about half the runs of one pair of tests.
-    Emulsion::Colour.to_srgb(linear).copy(interpretation: :srgb).copy_memory
+    FilmScan::Colour.to_srgb(linear).copy(interpretation: :srgb).copy_memory
   end
 
   # Stops of red and blue against green for one linear pixel.
@@ -26,7 +26,7 @@ module TestImages
   end
 
   def mean_pixel(image, left, top, width, height)
-    area = Emulsion::Colour.to_linear(image.extract_area(left, top, width, height))
+    area = FilmScan::Colour.to_linear(image.extract_area(left, top, width, height))
     (0..2).map { |c| area[c].avg }
   end
 end

@@ -29,7 +29,7 @@ class FlatFieldTest < Minitest::Test
 
   def test_fit_finds_the_falloff_each_channel_lost
     Dir.mktmpdir do |dir|
-      fit = Emulsion::FlatField.fit(roll(dir), verbose: false)
+      fit = FilmScan::FlatField.fit(roll(dir), verbose: false)
       refute fit.flat?
       FALLOFF.each_with_index do |corner, channel|
         # Read a little in from the very corner, where the curve is still
@@ -42,7 +42,7 @@ class FlatFieldTest < Minitest::Test
 
   def test_an_even_roll_is_left_alone
     Dir.mktmpdir do |dir|
-      fit = Emulsion::FlatField.fit(roll(dir, falloff: [1.0, 1.0, 1.0]), verbose: false)
+      fit = FilmScan::FlatField.fit(roll(dir, falloff: [1.0, 1.0, 1.0]), verbose: false)
       assert fit.flat?, "an even roll should not be lifted: #{fit.corners.inspect}"
       image = TestImages.linear_image(64, 48) { |_x, _y| [0.3, 0.3, 0.3] }
       assert_equal image, fit.apply(image)
@@ -52,8 +52,8 @@ class FlatFieldTest < Minitest::Test
   def test_applying_the_fit_evens_out_a_frame
     Dir.mktmpdir do |dir|
       paths = roll(dir)
-      fit = Emulsion::FlatField.fit(paths, verbose: false)
-      frame = Emulsion::Colour.load(paths.first)
+      fit = FilmScan::FlatField.fit(paths, verbose: false)
+      frame = FilmScan::Colour.load(paths.first)
       lifted = fit.apply(frame)
       corner = ->(image) { TestImages.mean_pixel(image, 4, 4, 24, 24).sum }
       middle = ->(image) { TestImages.mean_pixel(image, WIDTH / 2 - 12, HEIGHT / 2 - 12, 24, 24).sum }
@@ -66,8 +66,8 @@ class FlatFieldTest < Minitest::Test
   def test_strength_scales_the_lift
     Dir.mktmpdir do |dir|
       paths = roll(dir)
-      fit = Emulsion::FlatField.fit(paths, verbose: false)
-      frame = Emulsion::Colour.load(paths.first)
+      fit = FilmScan::FlatField.fit(paths, verbose: false)
+      frame = FilmScan::Colour.load(paths.first)
       corner = ->(image) { TestImages.mean_pixel(image, 4, 4, 24, 24).sum }
       full = corner.(fit.apply(frame))
 
@@ -83,7 +83,7 @@ class FlatFieldTest < Minitest::Test
   # A corner lifted in steps would show as rings in a clear sky.
   def test_the_lift_has_no_steps_in_it
     Dir.mktmpdir do |dir|
-      fit = Emulsion::FlatField.fit(roll(dir), verbose: false)
+      fit = FilmScan::FlatField.fit(roll(dir), verbose: false)
       sky = TestImages.linear_image(200, 200) { |_x, _y| [0.25, 0.3, 0.45] }
       lifted = fit.apply(sky)
       row = (0...200).map { |x| lifted.getpoint(x, 100)[1] }
@@ -96,10 +96,10 @@ class FlatFieldTest < Minitest::Test
   # crushed floor, and lifting it that far paints a coloured ring on every
   # frame. It is held to within TINT_LIMIT of what the three do together.
   def test_one_channel_cannot_run_away_from_the_others
-    fit = Emulsion::FlatField.new([[1.0, -0.8, 0.0], [1.0, -0.3, 0.0], [1.0, -0.2, 0.0]])
+    fit = FilmScan::FlatField.new([[1.0, -0.8, 0.0], [1.0, -0.3, 0.0], [1.0, -0.2, 0.0]])
     frame = TestImages.linear_image(WIDTH, HEIGHT) { |_x, _y| [0.2, 0.2, 0.2] }
     corner = TestImages.stops(TestImages.mean_pixel(fit.apply(frame), 2, 2, 10, 10))
-    assert_operator corner[1].abs, :<=, 2 * Emulsion::FlatField::TINT_LIMIT + 0.05
-    assert_operator corner[0].abs, :<=, 2 * Emulsion::FlatField::TINT_LIMIT + 0.05
+    assert_operator corner[1].abs, :<=, 2 * FilmScan::FlatField::TINT_LIMIT + 0.05
+    assert_operator corner[0].abs, :<=, 2 * FilmScan::FlatField::TINT_LIMIT + 0.05
   end
 end

@@ -1,4 +1,4 @@
-module Emulsion
+module FilmScan
   # Colour correction for films the scanner had no profile for, toward how a
   # reference film renders neutral when scanned properly.
   #

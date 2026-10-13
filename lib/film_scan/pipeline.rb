@@ -1,4 +1,4 @@
-module Emulsion
+module FilmScan
   # The correction itself, for one frame:
   #
   #   colour balance -> roll fit -> white balance -> vibrance ->

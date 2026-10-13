@@ -1,4 +1,4 @@
-module Emulsion
+module FilmScan
   # Opens crushed shadows and pulls back held highlights, one frame at a time.
   #
   # Stretching a frame's black and white points decides where its ends land but

@@ -1,4 +1,4 @@
-module Emulsion
+module FilmScan
   # What the toolkit thinks is wrong with a roll, said out loud before anything
   # is done about it.
   #

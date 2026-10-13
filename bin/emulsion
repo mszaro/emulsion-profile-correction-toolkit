@@ -1,5 +1,0 @@
-#!/usr/bin/env ruby
-require_relative "../lib/emulsion"
-require_relative "../lib/emulsion/cli"
-
-exit Emulsion::CLI.run(ARGV)

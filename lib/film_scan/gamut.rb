@@ -1,4 +1,4 @@
-module Emulsion
+module FilmScan
   # Bringing a pixel back inside the range without throwing its colour away.
   #
   # Clipping takes each channel down to white on its own, so a pixel that was

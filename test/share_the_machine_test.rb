@@ -3,7 +3,7 @@ require "open3"
 require "etc"
 
 class ShareTheMachineTest < Minitest::Test
-  LIB = File.expand_path("../lib/emulsion", __dir__)
+  LIB = File.expand_path("../lib/film_scan", __dir__)
 
   # Run the command line in a child, since --gentle lowers the priority of the
   # process it runs in and that should not follow the rest of the suite.
@@ -14,7 +14,7 @@ class ShareTheMachineTest < Minitest::Test
       require #{LIB.inspect}
       require #{(LIB + '/cli').inspect}
       $stderr.reopen(File::NULL)
-      Emulsion::CLI.run(#{flags.inspect})
+      FilmScan::CLI.run(#{flags.inspect})
       puts Vips.concurrency, Process.getpriority(Process::PRIO_PROCESS, 0)
     RUBY
     out, status = Open3.capture2("ruby", "-e", script)
@@ -44,7 +44,7 @@ class ShareTheMachineTest < Minitest::Test
   def test_gentle_takes_half_the_cores_at_low_priority
     threads, niceness = settings_after("--gentle")
     assert_equal [Etc.nprocessors / 2, 1].max, threads
-    assert_equal [Emulsion::CLI::GENTLE_NICENESS, inherited].max, niceness
+    assert_equal [FilmScan::CLI::GENTLE_NICENESS, inherited].max, niceness
   end
 
   def test_an_explicit_thread_count_wins_over_gentle
