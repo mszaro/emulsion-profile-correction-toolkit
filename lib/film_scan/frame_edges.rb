@@ -49,7 +49,8 @@ module FilmScan
     # Looks along all four sides of a float sRGB image in 0..1.
     def self.detect(image)
       scale = WORK.to_f / image.width
-      read = scale < 1.0 ? image.resize(scale) : image
+      # Worked out once, since every side reads it more than once.
+      read = (scale < 1.0 ? image.resize(scale) : image).copy_memory
       sides = %i[left right top bottom].to_h { |side| [side, scan_side(read, side)] }
       sides = sides.transform_values { |side| side && side.merge(edge: (side[:edge] / scale).round) } if scale < 1.0
       new(sides, image.width, image.height)

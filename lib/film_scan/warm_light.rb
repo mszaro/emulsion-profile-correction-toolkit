@@ -38,7 +38,8 @@ module FilmScan
     def confidence(srgb, target, roll_tilt)
       return 0.0 unless roll_tilt
 
-      small = at_work_size(srgb)
+      # Worked out once, since each reading below would shrink the frame again.
+      small = at_work_size(srgb).copy_memory
       tilt = tilt_of(small, target)
       return 0.0 unless tilt
 

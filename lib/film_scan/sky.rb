@@ -95,8 +95,8 @@ module FilmScan
       share = mask.avg
       return nil if share <= 0
 
-      linear = Colour.to_linear(srgb)
-      stops = (0..2).map { |c| (linear[c] * mask).avg / share }
+      # A band at a time, since each reading needs only its own.
+      stops = (0..2).map { |c| (Colour.to_linear(srgb[c]) * mask).avg / share }
       blue = Math.log2(stops[2] / stops[1])
       red = Math.log2(stops[0] / stops[1])
       lift = [[-blue, 0.0].max, limit].min
@@ -117,7 +117,8 @@ module FilmScan
     # the detector is willing to name. `srgb` is float sRGB in 0..1, upright.
     def upright_mask(frame)
       scale = WORK.to_f / frame.width
-      srgb = scale < 1.0 ? frame.resize(scale) : frame
+      # Worked out once, since every reading below takes it.
+      srgb = (scale < 1.0 ? frame.resize(scale) : frame).copy_memory
       found = found_in(srgb)
       return nil unless found
       return found if srgb.width == frame.width
@@ -133,7 +134,7 @@ module FilmScan
     def found_in(srgb)
       luma = (srgb * LUMA).bandmean * 3.0
       weight = bright(luma) * flat(luma, srgb) * high(srgb)
-      weight = settle(weight, srgb)
+      weight = settle(weight, srgb).copy_memory
       share = weight.avg
       return nil if share < MIN_SHARE / 2.0
 
