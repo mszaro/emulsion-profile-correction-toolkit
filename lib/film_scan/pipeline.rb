@@ -254,7 +254,9 @@ module FilmScan
 
       picture = inside(srgb)
       mask = Sky.mask(picture)
-      Sky.level(srgb, whole(mask), room, Sky.floor_gains(picture, mask, room))
+      levelled = Sky.level(srgb, whole(mask), room, Sky.floor_gains(picture, mask, room))
+      # Settled when it moved anything, since the recovery reads it several times.
+      levelled.equal?(srgb) ? srgb : settled(levelled)
     end
 
     # A sky is a large smooth surface sitting near neutral, which is exactly
