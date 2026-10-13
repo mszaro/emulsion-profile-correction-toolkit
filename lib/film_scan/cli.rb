@@ -154,7 +154,7 @@ module FilmScan
     # Settings the roll's fits never see: where and how frames are written,
     # and the strengths put on the raw fits after they are loaded.
     NOT_IN_FITS = %i[out only threads gentle previews contact_sheet format quality bits overrides
-                     explain audit convert_only profile roll_tone roll_fit flat_field].freeze
+                     explain audit convert_only crop profile roll_tone roll_fit flat_field].freeze
 
     MATCH_FILE = "match-reference.yml"
 

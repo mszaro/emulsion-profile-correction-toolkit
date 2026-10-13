@@ -38,6 +38,12 @@ class CLITest < Minitest::Test
       status, out = run_cli("--profile", "lucky-shd-400", "--out", out_dir, source)
       assert_equal 0, status
       assert_match(/reusing the roll analysis/, out)
+
+      # The analysis only ever reads the picture, so taking the borders off
+      # does not need it again.
+      status, out = run_cli("--profile", "lucky-shd-400", "--crop", "--out", out_dir, source)
+      assert_equal 0, status
+      assert_match(/reusing the roll analysis/, out)
     end
   end
 
