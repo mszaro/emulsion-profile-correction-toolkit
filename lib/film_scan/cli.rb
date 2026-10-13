@@ -36,19 +36,20 @@ module FilmScan
         warn parser
         return 1
       end
-      unless flags[:profile]
+      convert = flags[:convert_only]
+      unless flags[:profile] || convert
         warn "which film is this? Pass --profile, one of: #{Profile.available.join(', ')}"
         return 1
       end
 
       begin
-        profile = Profile.load(flags[:profile])
+        profile = convert ? nil : Profile.load(flags[:profile])
       rescue ArgumentError => e
         warn e.message
         return 1
       end
       # The profile sets the picture, and anything given on the command line wins.
-      options = DEFAULTS.merge(profile.settings).merge(flags)
+      options = DEFAULTS.merge(profile ? profile.settings : {}).merge(flags)
 
       begin
         reference = options[:reference] && Reference.load(options[:reference])
@@ -84,17 +85,19 @@ module FilmScan
 
       overrides = load_overrides(options[:overrides])
       sheet = options[:contact_sheet] ? ContactSheet.new(File.basename(source)) : nil
-      puts "profile: #{profile.name}"
+      puts(convert ? "converting only, no correction" : "profile: #{profile.name}")
 
-      options = measure_frame_balance(source, reference, options)
-      fits = analyse_roll(source, destination, profile, reference, options)
+      unless convert
+        options = measure_frame_balance(source, reference, options)
+        fits = analyse_roll(source, destination, profile, reference, options)
+      end
 
       puts "processing #{files.size} frames -> #{destination}"
       files.each_with_index do |path, i|
         name = File.basename(path)
         stem = File.basename(name, ".*")
         frame_options = options.merge(overrides[stem] || {})
-        result = Pipeline.new(frame_options, reference: reference, **fits).call(path)
+        result = convert ? Colour.load(path) : Pipeline.new(frame_options, reference: reference, **fits).call(path)
         # Render once into memory when a preview is wanted too. Shrinking the
         # unrendered pipeline for the preview ran all of it again, and on a
         # 6144px frame that took 45GB.
@@ -367,9 +370,15 @@ module FilmScan
 
     def depth_for(format, bits)
       offered = DEPTHS.fetch(format, [8])
-      return NATURAL_DEPTH.fetch(format, 8) unless bits
+      return natural_depth(format) unless bits
 
       offered.select { |d| d <= bits }.max || offered.min
+    end
+
+    # libheif's own encoder writes ten bits well; libvips' measured worse than
+    # its eight, so eight is what HEIC gets without it.
+    def natural_depth(format)
+      format == "heic" && HEIF_ENC ? 10 : NATURAL_DEPTH.fetch(format, 8)
     end
 
     # Written under a temporary name and renamed when complete, so an
@@ -378,43 +387,92 @@ module FilmScan
       format = output_format(source_path, options)
       path = File.join(destination, stem + FORMATS.fetch(format))
       partial = "#{path}.partial"
-      save(result, partial, format, options)
+      save(result, partial, format, options, orientation_of(source_path))
       File.rename(partial, path)
       path
     ensure
       File.delete(partial) if partial && File.exist?(partial)
     end
 
-    def save(result, partial, format, options)
+    def save(result, partial, format, options, orientation)
       bits = depth_for(format, options[:bits])
       quality = options[:quality]
+      # A black and white frame is kept as one channel.
+      result = result[0] if options[:monochrome]
+      # A straight conversion is already whole numbers, and dither would only add noise.
+      dither = !options[:convert_only]
+      return encode_heic(result, partial, bits, quality, orientation, dither) if format == "heic" && HEIF_ENC
+
       case format
       # Chroma subsampling smears grain into coloured blocks, so it stays off
       # wherever a format would otherwise apply it.
       when "jpeg"
-        quantise(result, 8).jpegsave(partial, Q: quality, subsample_mode: :off,
+        quantise(result, 8, dither: dither).jpegsave(partial, Q: quality, subsample_mode: :off,
                                               optimize_coding: true)
       when "heic"
-        quantise(result, bits).heifsave(partial, Q: quality, bitdepth: bits, lossless: quality >= 100,
+        quantise(result, bits, dither: dither).heifsave(partial, Q: quality, bitdepth: bits, lossless: quality >= 100,
                                                  compression: :hevc, subsample_mode: :off)
       when "jp2"
-        quantise(result, bits).jp2ksave(partial, Q: quality, lossless: quality >= 100,
+        quantise(result, bits, dither: dither).jp2ksave(partial, Q: quality, lossless: quality >= 100,
                                                  subsample_mode: :off)
       when "png"
-        quantise(result, bits).pngsave(partial, compression: 6)
+        quantise(result, bits, dither: dither).pngsave(partial, compression: 6)
       else
-        quantise(result, bits).tiffsave(partial, compression: :deflate, predictor: :horizontal)
+        quantise(result, bits, dither: dither).tiffsave(partial, compression: :deflate, predictor: :horizontal)
       end
     end
 
+    # libheif's own encoder, where it is installed. libvips gives the same file
+    # for every quality from 95 up and cannot write monochrome; this takes the
+    # HEVC quantiser directly, keeps full colour resolution (4:4:4) and writes
+    # black and white as true monochrome.
+    HEIF_ENC = ENV.fetch("PATH", "").split(File::PATH_SEPARATOR).map { |dir| File.join(dir, "heif-enc") }
+                  .find { |path| File.executable?(path) }
+
+    def encode_heic(result, partial, bits, quality, orientation, dither = true)
+      png = "#{partial}.png"
+      heic = "#{partial}.heic"
+      # The PNG it passes through carries no orientation, so the frame is turned
+      # upright here.
+      quantise(upright(result, orientation), bits > 8 ? 16 : 8, dither: dither).pngsave(png, compression: 1)
+      args = [HEIF_ENC, "-o", heic]
+      args += ["-b", bits.to_s] if bits > 8
+      args += ["-p", "chroma=444"] if result.bands > 1
+      args += quality >= 100 ? ["-L"] : ["-p", "x265:qp=#{((100 - quality) * 0.51).round.clamp(0, 51)}"]
+      ok = system(*args, png, out: File::NULL, err: File::NULL)
+      raise "heif-enc could not write #{File.basename(heic)}" unless ok && File.exist?(heic)
+
+      File.rename(heic, partial)
+    ensure
+      File.delete(png) if png && File.exist?(png)
+      File.delete(heic) if heic && File.exist?(heic)
+    end
+
+    # The scan's orientation tag, 1 when it has none.
+    def orientation_of(path)
+      header = Vips::Image.new_from_file(path)
+      header.get_typeof("orientation").zero? ? 1 : header.get("orientation")
+    rescue Vips::Error
+      1
+    end
+
+    def upright(image, orientation)
+      return image if orientation == 1
+
+      tagged = image.copy
+      tagged.set_type(GObject::GINT_TYPE, "orientation", orientation)
+      tagged.autorot
+    end
+
     # A float frame in 0..1 as whole numbers at the depth asked for.
-    def quantise(result, bits)
+    def quantise(result, bits, dither: true)
       top = (1 << bits) - 1
       scaled = result * top
       # Deeper than 8 bits has steps too fine to see, so only 8 needs the noise.
-      scaled += Vips::Image.gaussnoise(result.width, result.height, mean: 0.0, sigma: DITHER) if bits == 8
+      scaled += Vips::Image.gaussnoise(result.width, result.height, mean: 0.0, sigma: DITHER) if bits == 8 && dither
       scaled = (scaled < 0).ifthenelse(0, (scaled > top).ifthenelse(top, scaled))
-      scaled.cast(bits > 8 ? :ushort : :uchar)
+      # Rounded, since a cast truncates and a level of 127.9999 is 128.
+      scaled.rint.cast(bits > 8 ? :ushort : :uchar)
     end
 
     # Per-frame overrides, keyed by filename without extension. Values use the
@@ -450,6 +508,9 @@ module FilmScan
         opts.on("-p", "--profile NAME",
                 "Film stock: #{Profile.available.join(', ')},",
                 "or the path to a profile YAML file of your own.") { |v| options[:profile] = v }
+        opts.on("--convert-only",
+                "No correction, only a new file format, for film the lab",
+                "scanned well. Needs no profile.") { |v| options[:convert_only] = v }
 
         opts.separator ""
         opts.separator "Colour:"

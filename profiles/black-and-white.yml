@@ -1,0 +1,16 @@
+# Black and white film the lab scanned in colour, such as HP5, Kentmere,
+# Foma or Lady Grey. The scans come back faintly tinted and often flat.
+name: Black and white
+monochrome: true
+
+# Each frame is made neutral grey, then stretched so its darkest and lightest
+# fraction of a percent reach black and white, at most this far.
+black: 0.3
+white: 99.7
+max_stretch: 3.0
+
+# A little contrast around mid grey, halved on a frame that needed the whole
+# stretch, since that one is flat by nature and contrast mostly lifts grain.
+contrast: 0.12
+
+sharpness: 0.5

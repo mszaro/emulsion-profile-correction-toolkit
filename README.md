@@ -1,7 +1,7 @@
 # Film Scan Correction Toolkit
 
 A command-line tool for fixing colour casts, flat contrast and colour noise in
-lab scans of colour negative film.
+lab scans of colour negative and black and white film.
 
 Labs don't always have a scanning profile for the film you've shot. Using a
 profile for another stock can leave the scans washed out or with odd colours.
@@ -51,6 +51,7 @@ Some useful options:
 | `--explain` | Report the scan problems detected in the roll, without writing images. |
 | `--audit` | Also report how the chosen profile handles those problems. |
 | `--overrides FILE` | Load per-frame settings from YAML, keyed by filename without its extension. |
+| `--convert-only` | Just change the file format, no correction. No profile needed. |
 
 By default, image processing uses all CPU cores. Command-line settings override
 the profile. Run `bundle exec ./bin/filmscan --help` for the full list, including
@@ -65,16 +66,18 @@ bundle exec ./bin/filmscan --profile lucky-shd-400 \
   --format tiff --bits 16 ~/scans/my-roll
 ```
 
-TIFF, PNG and JPEG 2000 default to 16 bits per channel; JPEG and HEIC default
+TIFF, PNG and JPEG 2000 default to 16 bits per channel, HEIC to 10 and JPEG
 to 8. Use `--bits` to change the depth where the format supports it. Eight-bit
 output is dithered to reduce banding in gradients.
 
 `--quality` defaults to 98. Setting it to 100 produces lossless HEIC or JPEG
 2000 output. Support for these formats depends on your libvips build.
 
-HEIC defaults to 8 bits because higher depths gave worse results with the
-tested encoder. If your libvips build can't read the resulting HEIC files back,
-`--previews` gives you JPEGs to browse.
+HEIC is written with libheif's `heif-enc` (installed alongside libvips by
+Homebrew), at full colour resolution and as true greyscale for black and
+white. Without it, HEIC falls back to 8 bits through libvips. If your libvips
+build can't read the resulting HEIC files back, `--previews` gives you JPEGs
+to browse.
 
 ## Extra fixes
 
@@ -136,6 +139,12 @@ correction for warm subjects and bright skies.
 ![Geneva cathedral before and after](examples/000051-before-after.jpg)
 
 ![Limmat before and after](examples/000070-before-after.jpg)
+
+### Black and white (`black-and-white`)
+
+For HP5, Kentmere, Foma, Lady Grey and other black and white film scanned in
+colour. Removes the scan's tint, sets the black and white points, adds a
+little contrast and saves a greyscale file.
 
 ## Custom profiles
 

@@ -41,6 +41,24 @@ class CLITest < Minitest::Test
     end
   end
 
+  # Film the lab scanned well only changes container: every pixel comes back
+  # as it went in, and no profile is needed.
+  def test_convert_only_leaves_the_pixels_alone
+    Dir.mktmpdir do |dir|
+      source = File.join(dir, "roll")
+      Dir.mkdir(source)
+      write_roll(source, frames: 2)
+      out_dir = File.join(dir, "out")
+      status, out = run_cli("--convert-only", "--format", "png", "--bits", "8", "--out", out_dir, source)
+      assert_equal 0, status, out
+      Dir.glob(File.join(source, "*.png")).each do |original|
+        converted = File.join(out_dir, File.basename(original))
+        diff = (Vips::Image.new_from_file(original).cast(:int) - Vips::Image.new_from_file(converted).cast(:int)).abs.max
+        assert_equal 0, diff, File.basename(original)
+      end
+    end
+  end
+
   def test_unknown_reference_fails_cleanly
     Dir.mktmpdir do |dir|
       write_roll(dir, frames: 1)

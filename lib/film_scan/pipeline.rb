@@ -47,6 +47,8 @@ module FilmScan
     def render(scan)
       scan = trim(scan)
       @lost = lost_in(scan)
+      return render_monochrome(scan) if @o[:monochrome]
+
       srgb_in = settled(apply_roll_fit(balance(scan)))
 
       # Colour is measured and corrected in linear light, where a gain is what
@@ -84,6 +86,26 @@ module FilmScan
     end
 
     private
+
+    # A black and white frame. Labs scan it in colour and leave it tinted, so it
+    # is made neutral grey first, then stretched, given contrast, opened at the
+    # ends and sharpened as a colour frame would be. It stays three equal bands
+    # until it is written.
+    def render_monochrome(scan)
+      srgb = settled(grey(scan))
+      points = Measurements.new(srgb).endpoints(@o[:black], @o[:white], 0.0, max_stretch: @o[:max_stretch])
+      srgb = apply_endpoints(srgb, points)
+      srgb = settled(s_curve(srgb, contrast_for(points)))
+      srgb = settled(recover(srgb))
+      srgb = Detail.sharpen(srgb, Detail.measure(srgb), @o[:sharpness]) if fix?(:sharpen)
+      grey(srgb)
+    end
+
+    # Luma in linear light, as three equal sRGB bands.
+    def grey(srgb)
+      y = Colour.to_srgb((Colour.to_linear(srgb) * LUMA).bandmean * 3.0)
+      y.bandjoin([y, y]).copy(interpretation: :srgb)
+    end
 
     # A stage's pixels, worked out and kept.
     #

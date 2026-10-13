@@ -9,11 +9,14 @@ module FilmScan
 
     REQUIRED = %i[black white neutral wb wb_clamp shadow_wb target_saturation
                   max_vibrance knee max_stretch contrast chroma].freeze
+    # A black and white film has no colour to balance, so only its tones are set.
+    MONOCHROME_REQUIRED = %i[black white max_stretch contrast].freeze
     OPTIONAL = %i[name saturation chroma_radius roll_fit reference roll_balance
                   roll_balance_limit film_gains frame_balance frame_balance_limit
                   roll_tone lost_colour chroma_map chroma_shape
                   highlight_headroom sky_neutral sky_floor flat_field healthy_spread
-                  sky_headroom measured_frame_balance lamp_guard keep_warmth sharpness frame_tint_limit].freeze
+                  sky_headroom measured_frame_balance lamp_guard keep_warmth sharpness frame_tint_limit
+                  monochrome recovery].freeze
 
     attr_reader :id, :name, :settings, :healthy_spread
 
@@ -43,7 +46,7 @@ module FilmScan
       unknown = data.keys - REQUIRED - OPTIONAL
       raise ArgumentError, "profile #{id} has unknown settings: #{unknown.join(', ')}" if unknown.any?
 
-      missing = REQUIRED - data.keys
+      missing = (data[:monochrome] ? MONOCHROME_REQUIRED : REQUIRED) - data.keys
       raise ArgumentError, "profile #{id} is missing: #{missing.join(', ')}" if missing.any?
 
       gains = data[:film_gains]

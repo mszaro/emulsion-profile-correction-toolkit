@@ -9,10 +9,10 @@ class OutputFormatTest < Minitest::Test
     end
   end
 
-  def save(format, bits: 16, quality: 98)
+  def save(format, bits: 16, quality: 98, frame: @frame, orientation: 1, **options)
     Dir.mktmpdir do |dir|
       path = File.join(dir, "frame#{FilmScan::CLI::FORMATS.fetch(format)}")
-      @cli.send(:save, @frame, path, format, FilmScan::DEFAULTS.merge(bits: bits, quality: quality))
+      @cli.send(:save, frame, path, format, FilmScan::DEFAULTS.merge(bits: bits, quality: quality, **options), orientation)
       yield Vips::Image.new_from_file(path), File.size(path)
     end
   end
@@ -36,12 +36,13 @@ class OutputFormatTest < Minitest::Test
     assert_equal 8, @cli.send(:depth_for, "heic", 8)
   end
 
-  # Asked for nothing, each format takes the depth it carries well. HEIC's
-  # deeper modes measure worse than its eight, so eight is what it gets.
+  # Asked for nothing, each format takes the depth it carries well. HEIC gets
+  # ten bits from libheif's encoder, and eight from libvips', whose deeper
+  # modes measure worse.
   def test_each_format_has_a_depth_it_takes_by_default
     assert_equal 16, @cli.send(:depth_for, "tiff", nil)
     assert_equal 16, @cli.send(:depth_for, "jp2", nil)
-    assert_equal 8, @cli.send(:depth_for, "heic", nil)
+    assert_equal FilmScan::CLI::HEIF_ENC ? 10 : 8, @cli.send(:depth_for, "heic", nil)
     assert_equal 8, @cli.send(:depth_for, "jpeg", nil)
   end
 
@@ -81,7 +82,40 @@ class OutputFormatTest < Minitest::Test
     assert_operator lossless, :>, lossy
   end
 
-  def test_format_names_people_actually_type
+def test_black_and_white_is_written_as_one_channel
+  save("png", monochrome: true) { |image, _| assert_equal 1, image.bands }
+end
+
+def heif_info(format_options = {})
+  skip "heif-enc is not installed" unless FilmScan::CLI::HEIF_ENC
+  Dir.mktmpdir do |dir|
+    path = File.join(dir, "frame.heic")
+    @cli.send(:save, format_options.delete(:frame) || @frame, path, "heic",
+              FilmScan::DEFAULTS.merge(bits: nil, quality: 98, **format_options), format_options.delete(:orientation) || 1)
+    yield `heif-info "#{path}" 2>&1`, Vips::Image.new_from_file(path)
+  end
+end
+
+# Full colour resolution in colour, and true monochrome in black and white.
+def test_heic_keeps_colour_at_full_resolution
+  heif_info { |info, _| assert_match(/4:4:4/, info) }
+end
+
+def test_black_and_white_heic_is_monochrome
+  heif_info(monochrome: true) { |info, _| assert_match(/monochrome/, info) }
+end
+
+# The PNG the encoder reads carries no orientation, so a portrait frame is
+# turned upright before it is written.
+def test_a_portrait_frame_is_written_upright
+  skip "heif-enc is not installed" unless FilmScan::CLI::HEIF_ENC
+  save("heic", bits: 10, orientation: 6) do |image, _|
+    assert_equal 48, image.width
+    assert_equal 64, image.height
+  end
+end
+
+def test_format_names_people_actually_type
     assert_equal "jpeg", @cli.send(:output_format, "x.tiff", { format: "jpg" })
     assert_equal "heic", @cli.send(:output_format, "x.tiff", { format: "heif" })
     assert_equal "jp2", @cli.send(:output_format, "x.tiff", { format: "jpeg2000" })
