@@ -214,6 +214,8 @@ module FilmScan
       }
       return {} unless want.values.any?
 
+      # The tuning, the tilt and the look all read frames at the same size.
+      @thumbs = {}
       all = find_files(source, nil)
       # The tuning pass renders frames through the whole pipeline, so every
       # setting it reads changes the balance it settles on, and the key holds
@@ -287,7 +289,7 @@ module FilmScan
       end
       fits.compact
     ensure
-      @tuned = nil
+      @thumbs = nil
     end
 
     # Frames read from each roll for the look, spread through it.
@@ -326,20 +328,23 @@ module FilmScan
     # films and some lab sessions tilt every frame.
     def roll_tilt(paths, options, fits, reference)
       tilts = paths.filter_map do |path|
-        # The frames the tuning read are already in memory at this size.
-        image = @tuned&.delete(path) || small(path)
-        Pipeline.new(options, reference: reference, **fits.slice(:balance, :flat)).tilt(image)
+        Pipeline.new(options, reference: reference, **fits.slice(:balance, :flat)).tilt(small(path))
       end
       tilts.empty? ? nil : ColourBalance.percentile(tilts, 50)
     end
 
     # A frame at the size the roll's measurements read it, in memory, since a
     # thumbnail is read once through and the pipeline goes over a frame several
-    # times.
+    # times. Kept while the roll is analysed, so each frame is decoded once.
     def small(path)
+      kept = @thumbs && @thumbs[path]
+      return kept if kept
+
       image = Vips::Image.thumbnail(path, TUNE_WIDTH, size: :down).copy_memory
       image = image[0..2] if image.bands > 3
-      image.cast(:float) / (image.format == :ushort ? 65535.0 : 255.0)
+      image = image.cast(:float) / (image.format == :ushort ? 65535.0 : 255.0)
+      @thumbs[path] = image if @thumbs
+      image
     end
 
     # Off by default, and kept for a roll that wants it named on the command
@@ -414,9 +419,7 @@ module FilmScan
     # finished picture, and nudges the roll's balance until they land right.
     def tune_balance(paths, options, fits, reference)
       step = [paths.size / TUNE_FRAMES, 1].max
-      chosen = paths.each_slice(step).map(&:first).first(TUNE_FRAMES)
-      frames = chosen.map { |path| small(path) }
-      @tuned = chosen.zip(frames).to_h
+      frames = paths.each_slice(step).map(&:first).first(TUNE_FRAMES).map { |path| small(path) }
       TUNE_ROUNDS.times do
         # Without the lamp guard, which measures frames against the balance
         # this settles on, and cropped, since only the picture is measured.
