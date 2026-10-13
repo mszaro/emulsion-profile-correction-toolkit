@@ -447,8 +447,11 @@ module FilmScan
       # upright here.
       frame = quantise(upright(result, orientation), bits > 8 ? 16 : 8, dither: dither)
       # Tagged for its depth, or a one channel frame is written to PNG at eight bits.
+      # Stored rather than compressed: a grainy frame shrinks by 5% at the
+      # lightest setting, which cost 3s to write and a second more for heif-enc
+      # to read back.
       tag = { [1, true] => :grey16, [1, false] => :b_w, [3, true] => :rgb16, [3, false] => :srgb }
-      frame.copy(interpretation: tag.fetch([frame.bands, bits > 8])).pngsave(png, compression: 1)
+      frame.copy(interpretation: tag.fetch([frame.bands, bits > 8])).pngsave(png, compression: 0)
       args = [HEIF_ENC, "-o", heic]
       args += ["-b", bits.to_s] if bits > 8
       args += ["-p", "chroma=444"] if result.bands > 1
