@@ -203,6 +203,9 @@ module FilmScan
       # colour to reshape, so the shaping runs without one.
       return shape(scan) unless frame_balance?
 
+      # Settled, since the frame fit, the lamp check and the correction each
+      # read it through.
+      scan = settled(scan)
       frame = frame_fit(scan)
       # A frame the fit could not read is not one to infer lost colour on
       # either: the shaping assumes a frame balanced to the reference, and on a
