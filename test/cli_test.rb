@@ -62,7 +62,7 @@ class CLITest < Minitest::Test
   # A bare --fix just before the folder takes the usual set, not the folder.
   def test_a_bare_fix_does_not_take_the_folder
     assert_equal ["--fix=#{FilmScan::DEFAULT_FIXES.join(",")}", "/scans/roll"], FilmScan::CLI.bare_fix(["--fix", "/scans/roll"])
-    assert_equal ["--fix", "crop,shadows", "/scans/roll"], FilmScan::CLI.bare_fix(["--fix", "crop,shadows", "/scans/roll"])
+    assert_equal ["--fix", "floor,shadows", "/scans/roll"], FilmScan::CLI.bare_fix(["--fix", "floor,shadows", "/scans/roll"])
     assert_equal ["--fix", "all", "/x"], FilmScan::CLI.bare_fix(["--fix", "all", "/x"])
     assert_equal ["--fix=#{FilmScan::DEFAULT_FIXES.join(",")}"], FilmScan::CLI.bare_fix(["--fix"])
   end

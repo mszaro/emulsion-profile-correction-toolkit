@@ -29,7 +29,7 @@ module FilmScan
     # How the frame tilts as the frame balance sees it, measured on each of the
     # roll's frames to find what is typical for the roll.
     def tilt(scan)
-      WarmLight.tilt(roll_balanced(trim(scan)), @reference.neutral)
+      WarmLight.tilt(inside(roll_balanced(trim(scan))), @reference.neutral)
     end
 
     # The frame as the colour shaping receives it: trimmed, then the roll's
@@ -37,10 +37,10 @@ module FilmScan
     # such a frame is not shaped.
     def balanced(scan)
       scan = roll_balanced(trim(scan))
-      return scan unless frame_balance?
+      return inside(scan) unless frame_balance?
 
       frame = frame_fit(scan)
-      frame&.apply(scan)
+      frame && inside(frame.apply(scan))
     end
 
     # The correction on a loaded frame, a float sRGB image in 0..1.
@@ -54,20 +54,20 @@ module FilmScan
       # Colour is measured and corrected in linear light, where a gain is what
       # it claims to be. Tone work happens later, in display space.
       linear = Colour.to_linear(srgb_in)
-      measured = Measurements.new(linear)
+      measured = Measurements.new(inside(linear))
 
       # Balance before vibrance, since the boost would multiply any cast along
       # with the colour, and again after, since it lifts leftover cast hardest.
       linear = apply_tone_gains(linear, measured.tone_gains(@o[:wb], @o[:wb_clamp],
                                                             @o[:shadow_wb]))
       linear = settled(vibrance(linear, vibrance_amount(measured), @o[:knee]))
-      after = Measurements.new(linear)
+      after = Measurements.new(inside(linear))
       linear = apply_tone_gains(linear, after.tone_gains(@o[:wb] * SECOND_PASS,
                                                          @o[:wb_clamp], @o[:shadow_wb]))
 
       srgb = settled(Colour.to_srgb(linear))
-      points = Measurements.new(srgb).endpoints(@o[:black], @o[:white], @o[:neutral],
-                                                max_stretch: @o[:max_stretch])
+      points = Measurements.new(inside(srgb)).endpoints(@o[:black], @o[:white], @o[:neutral],
+                                                        max_stretch: @o[:max_stretch])
       srgb = apply_endpoints(srgb, points)
       srgb = @tone.apply(srgb) if @tone
       srgb = settled(s_curve(srgb, contrast_for(points)))
@@ -77,8 +77,8 @@ module FilmScan
       srgb = settled(recover(srgb))
       # Measured once, since the grain tells the denoise how hard to work and
       # the softness tells the sharpening what to do.
-      detail = fix?(:sharpen) || fix?(:grain) ? Detail.measure(srgb) : nil
-      srgb = denoise_chroma(srgb, chroma_for(detail), chroma_radius_for(srgb))
+      detail = fix?(:sharpen) || fix?(:grain) ? Detail.measure(inside(srgb)) : nil
+      srgb = denoise_chroma(srgb, chroma_for(detail), chroma_radius_for(inside(srgb)))
       srgb = fix?(:sharpen) ? Detail.sharpen(srgb, detail, @o[:sharpness]) : srgb
       # Again at the end: the tone curve, the contrast and the recovery all
       # push pixels back over the top after the stretch has fitted them.
@@ -93,11 +93,11 @@ module FilmScan
     # until it is written.
     def render_monochrome(scan)
       srgb = settled(grey(scan))
-      points = Measurements.new(srgb).endpoints(@o[:black], @o[:white], 0.0, max_stretch: @o[:max_stretch])
+      points = Measurements.new(inside(srgb)).endpoints(@o[:black], @o[:white], 0.0, max_stretch: @o[:max_stretch])
       srgb = apply_endpoints(srgb, points)
       srgb = settled(s_curve(srgb, contrast_for(points)))
       srgb = settled(recover(srgb))
-      srgb = Detail.sharpen(srgb, Detail.measure(srgb), @o[:sharpness]) if fix?(:sharpen)
+      srgb = Detail.sharpen(srgb, Detail.measure(inside(srgb)), @o[:sharpness]) if fix?(:sharpen)
       grey(srgb)
     end
 
@@ -118,18 +118,36 @@ module FilmScan
       image.copy_memory
     end
 
-    # Everything that has to happen before the frame is measured: the scanner's
-    # borders off, and the corners brought back up. The borders are also where
-    # this frame's own black floor is read, when the scan has them.
+    # Everything that has to happen before the frame is measured: finding where
+    # the picture sits, the borders off when --crop asks, and the corners
+    # brought back up. The borders are also where this frame's own black floor
+    # is read, when the scan has them.
     def trim(scan)
-      return scan unless fix?(:crop) || fix?(:floor) || fix?(:flat)
-
       edges = FrameEdges.detect(scan)
       @floor = edges.floor_offsets if fix?(:floor)
-      area = fix?(:crop) && edges.picture
-      scan = scan.extract_area(*area) if area
-      scan = @flat.apply(scan) if @flat && fix?(:flat)
+      area = edges.picture
+      if area && @o[:crop]
+        scan = scan.extract_area(*area)
+      else
+        @area = area
+        @size = [scan.width, scan.height]
+      end
+      scan = @flat.apply(scan, @area) if @flat && fix?(:flat)
       scan
+    end
+
+    # The picture without the borders it was kept with. Overscan and rebate are
+    # not part of any scene, so every step reads this and changes the whole
+    # frame, and nothing marks where the reading stopped.
+    def inside(image)
+      @area ? image.extract_area(*@area) : image
+    end
+
+    # A mask found on the picture, carried out to the edges of the frame.
+    def whole(mask)
+      return mask unless @area && mask
+
+      mask.embed(@area[0], @area[1], *@size, extend: :copy)
     end
 
     def fix?(name)
@@ -142,13 +160,14 @@ module FilmScan
     def recover(srgb)
       return srgb unless fix?(:shadows)
 
-      measured = Dynamics.measure(srgb).dup
-      held = 1.0 - Diagnosis.crushed(srgb) * (1.0 - CRUSHED_SHADOW_KEEP)
+      picture = inside(srgb)
+      measured = Dynamics.measure(picture).dup
+      held = 1.0 - Diagnosis.crushed(picture) * (1.0 - CRUSHED_SHADOW_KEEP)
       measured.shadow_room *= held if held < 1.0
       lost = @lost && @lost / 255.0
       # Clipping is read from the scan. By here the correction has carried
       # pale skies near white, and they would count as clipped.
-      measured.clipped = lost.avg if lost
+      measured.clipped = inside(lost).avg if lost
       Dynamics.apply(srgb, measured, @o[:recovery], lost: lost)
     end
 
@@ -200,11 +219,12 @@ module FilmScan
     end
 
     def frame_fit(scan)
-      frame = ColourBalance.fit_frame(scan, @reference.neutral, limit: @o[:frame_balance_limit],
-                                                                skip: sky_in(scan))
+      picture = inside(scan)
+      frame = ColourBalance.fit_frame(picture, @reference.neutral, limit: @o[:frame_balance_limit],
+                                                                   skip: sky_in(picture))
       return nil unless frame
 
-      frame = keep_warmth(frame, scan)
+      frame = keep_warmth(frame, picture)
       limit = @o[:frame_tint_limit]
       frame = WarmLight.cap_tint(frame, limit / @o[:frame_balance]) if limit
       frame.strength = @o[:frame_balance]
@@ -232,7 +252,9 @@ module FilmScan
       room = @o[:sky_floor].to_f
       return srgb unless room.positive?
 
-      Sky.level(srgb, Sky.mask(srgb), room)
+      picture = inside(srgb)
+      mask = Sky.mask(picture)
+      Sky.level(srgb, whole(mask), room, Sky.floor_gains(picture, mask, room))
     end
 
     # A sky is a large smooth surface sitting near neutral, which is exactly
@@ -260,7 +282,7 @@ module FilmScan
       sky_room = @o[:sky_headroom].to_f
       return room unless sky_room > room
 
-      @sky_found = !Sky.mask(scan).nil? if @sky_found.nil? && scan
+      @sky_found = !Sky.mask(inside(scan)).nil? if @sky_found.nil? && scan
       @sky_found ? sky_room : room
     end
 

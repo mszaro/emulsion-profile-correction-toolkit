@@ -52,6 +52,7 @@ Some useful options:
 | `--audit` | Also report how the chosen profile handles those problems. |
 | `--overrides FILE` | Load per-frame settings from YAML, keyed by filename without its extension. |
 | `--convert-only` | Just change the file format, no correction. No profile needed. |
+| `--crop` | Remove the film borders. They stay by default. |
 
 By default, image processing uses all CPU cores. Command-line settings override
 the profile. Run `bundle exec ./bin/filmscan --help` for the full list, including
@@ -81,12 +82,12 @@ to browse.
 
 ## Extra fixes
 
-The film profiles handle colour and tone. Use `--fix` to also crop scan borders,
-recover shadows and highlights, or sharpen soft frames:
+The film profiles handle colour and tone. Use `--fix` to also recover shadows
+and highlights, or sharpen soft frames:
 
 ```sh
 bundle exec ./bin/filmscan --profile lucky-shd-400 \
-  --fix crop,shadows ~/scans/my-roll
+  --fix floor,shadows ~/scans/my-roll
 ```
 
 `--fix` on its own enables the default set. `--fix all` enables every available
@@ -94,15 +95,14 @@ fix, or you can pass a comma-separated list:
 
 | Fix | What it does |
 | --- | --- |
-| `crop` | Trim scanner overscan and film borders. |
 | `floor` | Use the film border to estimate the frame's black level. |
 | `flat` | Lift dark corners. Also needs a nonzero `--flat-field` setting. |
 | `shadows` | Recover shadow and highlight detail where possible. |
 | `sharpen` | Sharpen frames that measure as soft. |
 | `grain` | Adjust colour noise reduction to the frame's measured grain. |
 
-`crop` and `floor` need visible film borders. If the lab already cropped them
-off, these fixes are skipped. Corner correction is disabled in all bundled
+`floor` needs visible film borders. If the lab already cropped them off, it is
+skipped. Corner correction is disabled in all bundled
 profiles because it can add coloured halos to skies.
 
 ## Supported films

@@ -75,11 +75,25 @@ module FilmScan
     #
     # The correction is local to the mask, feathered at its edge, and capped,
     # so a frame where the detector is wrong loses very little.
-    def level(srgb, mask, limit)
-      return srgb if mask.nil? || limit <= 0
+    #
+    # The gains may be read elsewhere, from the picture inside a frame's
+    # borders, and given here to apply to the whole frame.
+    def level(srgb, mask, limit, gains = floor_gains(srgb, mask, limit))
+      return srgb if mask.nil? || gains.nil?
+
+      linear = Colour.to_linear(srgb)
+      feather = mask.gaussblur([srgb.width * FEATHER, 1.0].max)
+      moved = (0..2).map { |c| linear[c] * (feather * (gains[c] - 1.0) + 1.0) }
+      Colour.to_srgb(Colour.clamp01(moved[0].bandjoin([moved[1], moved[2]]))).copy(interpretation: :srgb)
+    end
+
+    # The red and blue gains that bring a warm sky back to the floor, or nil
+    # when the sky is not warm or there is none.
+    def floor_gains(srgb, mask, limit)
+      return nil if mask.nil? || limit <= 0
 
       share = mask.avg
-      return srgb if share <= 0
+      return nil if share <= 0
 
       linear = Colour.to_linear(srgb)
       stops = (0..2).map { |c| (linear[c] * mask).avg / share }
@@ -87,12 +101,9 @@ module FilmScan
       red = Math.log2(stops[0] / stops[1])
       lift = [[-blue, 0.0].max, limit].min
       cut = [[red, 0.0].max, limit].min
-      return srgb if lift.zero? && cut.zero?
+      return nil if lift.zero? && cut.zero?
 
-      feather = mask.gaussblur([srgb.width * FEATHER, 1.0].max)
-      gains = [2**-cut, 1.0, 2**lift]
-      moved = (0..2).map { |c| linear[c] * (feather * (gains[c] - 1.0) + 1.0) }
-      Colour.to_srgb(Colour.clamp01(moved[0].bandjoin([moved[1], moved[2]]))).copy(interpretation: :srgb)
+      [2**-cut, 1.0, 2**lift]
     end
 
     # Read at one size whatever the frame's own. Texture is what separates a

@@ -100,11 +100,13 @@ module FilmScan
       (ring > BINS - 1).ifthenelse(BINS - 1, ring).cast(:uchar)
     end
 
-    # Distance from the centre, 1.0 at the corners.
-    def self.radius(width, height)
-      centre = Vips::Image.xyz(width, height) - [width / 2.0, height / 2.0]
+    # Distance from the centre of the picture, 1.0 at its corners. The picture
+    # is the whole image unless an area inside it is given.
+    def self.radius(width, height, area = nil)
+      left, top, across, down = area || [0, 0, width, height]
+      centre = Vips::Image.xyz(width, height) - [left + across / 2.0, top + down / 2.0]
       ((centre[0] * centre[0] + centre[1] * centre[1])**0.5) /
-        ((width * width + height * height)**0.5 / 2.0)
+        ((across * across + down * down)**0.5 / 2.0)
     end
 
     def self.median(values)
@@ -193,10 +195,10 @@ module FilmScan
 
     # Held flat past the last ring fitted, since a curve in r to the fourth
     # runs away as soon as it is asked about radii it never saw.
-    def apply(image)
+    def apply(image, area = nil)
       return image if flat?
 
-      r = self.class.radius(image.width, image.height)
+      r = self.class.radius(image.width, image.height, area)
       r = (r > limit).ifthenelse(limit, r)
       squared = r * r
       gains = (0..2).map do |c|

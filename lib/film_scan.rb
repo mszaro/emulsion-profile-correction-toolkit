@@ -35,8 +35,8 @@ module FilmScan
   # Corrections that are about the camera, the scanner or the frame rather
   # than the film, each only run when --fix asks for it. DEFAULT_FIXES is what
   # a bare --fix turns on.
-  FIXES = %i[crop floor flat shadows sharpen grain].freeze
-  DEFAULT_FIXES = %i[crop floor flat shadows sharpen grain].freeze
+  FIXES = %i[floor flat shadows sharpen grain].freeze
+  DEFAULT_FIXES = %i[floor flat shadows sharpen grain].freeze
 
   # Settings that are not about any one film. The rest come from the profile.
   DEFAULTS = {
@@ -55,6 +55,9 @@ module FilmScan
     frame_tint_limit: nil,
     roll_tone: 0.0,
     fix: [],
+    # The film borders stay unless --crop takes them off. Either way the
+    # correction is measured on the picture alone.
+    crop: false,
     # Off unless a profile asks: the falloff is measured across a roll, and a
     # roll of skies and dark ground does not average out the way the fit needs.
     flat_field: 0.0,

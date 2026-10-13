@@ -20,6 +20,7 @@ module FilmScan
 
       chosen = names.map { |name| name.to_s.strip.downcase.to_sym }
       unknown = chosen - FIXES
+      raise ArgumentError, "borders come off with --crop now, not --fix crop" if unknown.include?(:crop)
       raise ArgumentError, "no such fix: #{unknown.join(', ')}. Try #{FIXES.join(', ')} or all" if unknown.any?
 
       chosen
@@ -109,7 +110,7 @@ module FilmScan
         name = File.basename(path)
         stem = File.basename(name, ".*")
         frame_options = options.merge(overrides[stem] || {})
-        result = convert ? Colour.load(path) : Pipeline.new(frame_options, reference: reference, **fits).call(path)
+        result = convert ? converted(path, options) : Pipeline.new(frame_options, reference: reference, **fits).call(path)
         # Render once into memory when a preview is wanted too. Shrinking the
         # unrendered pipeline for the preview ran all of it again, and on a
         # 6144px frame that took 45GB.
@@ -182,14 +183,10 @@ module FilmScan
           fits[:flat] = FlatField.fit(all) { |_path, image| FrameEdges.detect(image).picture }
         end
         puts "sampling roll of #{all.size} frames..."
-        # Sampled inside the picture when the borders are coming off anyway,
-        # since overscan and rebate are not part of any scene.
+        # Sampled inside the picture whether or not the borders are kept, since
+        # overscan and rebate are not part of any scene.
         skip = options[:sky_neutral] ? ->(image) { Sky.mask(image) } : nil
-        sample = if options[:fix].include?(:crop)
-                   RollSample.collect(all, skip: skip) { |image| FrameEdges.detect(image).picture }
-                 else
-                   RollSample.collect(all, skip: skip)
-                 end
+        sample = RollSample.collect(all, skip: skip) { |image| FrameEdges.detect(image).picture }
         if want[:balance] && !fits[:balance]
           puts "balancing the roll toward #{reference.name}..."
           fits[:balance] = ColourBalance.fit_roll(sample, reference.neutral, film: options[:film_gains],
@@ -319,8 +316,10 @@ module FilmScan
       frames = paths.each_slice(step).map(&:first).first(TUNE_FRAMES).map { |path| small(path) }
       TUNE_ROUNDS.times do
         # Without the lamp guard, which measures frames against the balance
-        # this settles on.
-        rendered = frames.map { |image| Pipeline.new(options, reference: reference, **fits.except(:tilt)).render(image) }
+        # this settles on, and cropped, since only the picture is measured.
+        rendered = frames.map do |image|
+          Pipeline.new(options.merge(crop: true), reference: reference, **fits.except(:tilt)).render(image)
+        end
         # The sky is kept out here too. The tuning reads the greys of finished
         # frames, and a sky would vote in this estimate exactly as it does in
         # the frame's own.
@@ -465,6 +464,13 @@ module FilmScan
       File.delete(heic) if heic && File.exist?(heic)
     end
 
+    # A frame as it was scanned, cropped to the picture when --crop asks.
+    def converted(path, options)
+      scan = Colour.load(path)
+      area = options[:crop] && FrameEdges.detect(scan).picture
+      area ? scan.extract_area(*area) : scan
+    end
+
     # The scan's orientation tag, 1 when it has none.
     def orientation_of(path)
       header = Vips::Image.new_from_file(path)
@@ -598,6 +604,9 @@ module FilmScan
                 "frame rather than the film, off unless asked for. Bare --fix",
                 "turns on the usual set, --fix all turns on everything, or",
                 "name them: #{FIXES.join(', ')}.") { |v| options[:fix] = CLI.fixes_from(v) }
+        opts.on("--crop",
+                "Take off the film borders and the scanner's overscan. They",
+                "stay by default, and are never measured either way.") { |v| options[:crop] = v }
         opts.on("--flat-field FLOAT", Float,
                 "Strength of the lift in the corners, 0 to 1",
                 "(default #{DEFAULTS[:flat_field]}).") { |v| options[:flat_field] = v }
