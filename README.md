@@ -104,6 +104,43 @@ white. Without it, HEIC falls back to 8 bits through libvips. If your libvips
 build can't read the resulting HEIC files back, `--previews` gives you JPEGs
 to browse.
 
+### Apple's hardware encoder (macOS, optional)
+
+On a Mac with Apple silicon, `--encoder apple` writes HEIC with the hardware
+HEVC encoder instead of x265. The files are the same kind: 10-bit 4:4:4,
+written as a grid of 2048px tiles that libheif, libvips and macOS all open.
+On the frames tested it was five to seven times faster than x265 and used
+almost no CPU. The files were 15 to 19% larger at the same quality setting,
+with slightly higher fidelity. It needs a small helper, built once with
+Xcode's command line tools (macOS 13 or later):
+
+```sh
+bundle exec rake apple_heic
+```
+
+Without the helper, `--encoder apple` stops and says how to build it. x265
+stays the default, and some frames still go to it:
+
+- black and white, since Apple's decoder reads the hardware's monochrome a
+  level off grey;
+- lossless (`--quality 100`), and 8 or 12 bits;
+- any frame denser or noisier than the hardware encoder has been tested on.
+
+That last check matters. In testing, a frame of pure noise hung the hardware
+encoder and the Mac's kernel panicked. So the helper measures every frame
+before the encoder sees it, and hands it to x265 if its densest tile would
+need more than 1.85 bytes a pixel, or if it has less detail than 0.35 times
+its grain. Those limits are 10% short of the densest and the grainiest of 31
+real frames that encoded cleanly: corrected, matched and unprocessed scans
+from 0.5 to 2.1 bytes a pixel. On the rolls they came from, about one colour
+frame in 300 goes to x265. The hardware encoder's real limit is unproven
+beyond those frames.
+
+Installing the gem never needs a compiler. A macOS platform gem could carry
+the helper prebuilt: build it with `rake apple_heic` on arm64, add
+`libexec/apple-heic` to the gem's files and set its platform to
+`arm64-darwin`.
+
 ## Extra fixes
 
 The film profiles handle colour and tone. Use `--fix` to also recover shadows
