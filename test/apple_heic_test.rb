@@ -1,5 +1,4 @@
 require_relative "test_helper"
-require "minitest/mock"
 require "json"
 
 # --encoder apple where it can't run, and what the CLI does when the helper
@@ -14,12 +13,22 @@ class AppleHeicRoutingTest < Minitest::Test
     end
   end
 
+  # Swaps a method for the length of the block. minitest 6 no longer ships
+  # minitest/mock, and plain `rake test` runs it.
+  def replacing(target, name, impl)
+    original = target.method(name)
+    target.singleton_class.send(:define_method, name, impl)
+    yield
+  ensure
+    target.singleton_class.send(:define_method, name, original)
+  end
+
   def with_helper(script)
     Dir.mktmpdir do |dir|
       fake = File.join(dir, "apple-heic")
       File.write(fake, "#!/bin/sh\n#{script}\n")
       File.chmod(0o755, fake)
-      FilmScan::AppleHeic.stub(:command, ->(png, heic, **) { [fake, png, heic] }) { yield }
+      replacing(FilmScan::AppleHeic, :command, ->(png, heic, **) { [fake, png, heic] }) { yield }
     end
   end
 
@@ -37,7 +46,7 @@ class AppleHeicRoutingTest < Minitest::Test
       (Vips::Image.black(16, 16, bands: 3) + 128).cast(:uchar).pngsave(File.join(dir, "000001.png"))
       status = nil
       _, err = capture_io do
-        File.stub(:executable?, false) do
+        replacing(File, :executable?, ->(*) { false }) do
           status = FilmScan::CLI.run(["--convert-only", "--format", "heic", "--encoder", "apple", dir])
         end
       end
