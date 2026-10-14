@@ -30,12 +30,13 @@ module FilmScan
     end
 
     # Load as float 0..1 sRGB, from an 8-bit or a 16-bit scan. Extra bands are
-    # dropped and a greyscale scan is fanned out to three channels.
+    # dropped and a greyscale scan is fanned out to three channels. The frame
+    # carries its orientation override, if it has one, in place of its tag.
     def load(path)
       image = Vips::Image.new_from_file(path, access: :random)
       image = image.bandjoin([image, image]) if image.bands == 1
       image = image[0..2] if image.bands > 3
-      image.cast(:float) / (image.format == :ushort ? 65535.0 : 255.0)
+      Orientation.apply(image.cast(:float) / (image.format == :ushort ? 65535.0 : 255.0), path)
     end
   end
 end

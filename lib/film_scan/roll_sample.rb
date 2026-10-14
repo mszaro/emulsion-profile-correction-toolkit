@@ -23,7 +23,7 @@ module FilmScan
 
       paths.each_with_index do |path, i|
         print "\r  sampling #{i + 1}/#{paths.size}" if verbose
-        image = Vips::Image.new_from_file(path, access: :random)
+        image = Orientation.apply(Vips::Image.new_from_file(path, access: :random), path)
         image = image.bandjoin([image, image]) if image.bands == 1
         image = image[0..2] if image.bands > 3
         # An eight bit scan cannot read past 255, so only a deeper one is read

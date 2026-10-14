@@ -62,6 +62,23 @@ By default, image processing uses all CPU cores. Command-line settings override
 the profile. Run `bundle exec ./bin/filmscan --help` for the full list, including
 colour, contrast and grain controls.
 
+## Frames that come out sideways
+
+Labs tag portrait frames with an orientation, and each corrected frame is
+written upright from it. When the lab missed a frame or tagged it the wrong
+way, give that frame an orientation in the overrides file, numbered as EXIF
+numbers them: 1 leaves it as scanned, 3 turns it upside down, 6 a quarter turn
+clockwise and 8 a quarter turn anticlockwise.
+
+```yaml
+"000045":
+  orientation: 8
+```
+
+The sky detection and the roll's measurements see the frame the same way up as
+the written file. A contact sheet shows every frame the way it will be written,
+so it is the quickest place to spot one that needs this.
+
 ## Matching another roll
 
 The profiles balance each film toward FujiFilm Superia in general. If you shot

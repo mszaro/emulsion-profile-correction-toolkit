@@ -109,6 +109,7 @@ module FilmScan
       FileUtils.mkdir_p(preview_dir) if options[:previews]
 
       overrides = load_overrides(options[:overrides])
+      Orientation.overrides = orientations(find_files(source, nil), overrides)
       sheet = options[:contact_sheet] ? ContactSheet.new(File.basename(source)) : nil
       puts(convert ? "converting only, no correction" : "profile: #{profile.name}")
 
@@ -152,6 +153,7 @@ module FilmScan
     ensure
       # An encoder left running would write its file after the run had gone.
       finish(writing)
+      Orientation.overrides = {}
     end
 
     private
@@ -229,7 +231,7 @@ module FilmScan
       key = AnalysisCache.key(all, healthy_spread: healthy_spread(profile, reference),
                                    neutral: want[:balance] && reference.neutral,
                                    tone_shape: want[:tone] && reference.tone_shape,
-                                   settings: settings)
+                                   settings: settings, orientations: Orientation.overrides.slice(*all))
       cached = AnalysisCache.load(destination, key) || {}
       fits = {}
       fits[:balance] = ColourBalance.from_cache(cached[:balance]) if want[:balance] && cached[:balance]
@@ -345,7 +347,7 @@ module FilmScan
       kept = @thumbs && @thumbs[path]
       return kept if kept
 
-      image = Vips::Image.thumbnail(path, TUNE_WIDTH, size: :down).copy_memory
+      image = Orientation.thumbnail(path, TUNE_WIDTH).copy_memory
       image = image[0..2] if image.bands > 3
       image = image.cast(:float) / (image.format == :ushort ? 65535.0 : 255.0)
       @thumbs[path] = image if @thumbs
@@ -511,7 +513,7 @@ module FilmScan
       format = output_format(source_path, options)
       path = File.join(destination, stem + FORMATS.fetch(format))
       partial = "#{path}.partial"
-      encoding = save(result, partial, format, options, orientation_of(source_path), wait: false)
+      encoding = save(result, partial, format, options, Orientation.of(source_path), wait: false)
       Thread.new do
         Thread.current.report_on_exception = false
         encoding&.value
@@ -585,7 +587,7 @@ module FilmScan
       apple = encoder == "apple" && !heif_enc_instead?(result.bands, bits, quality)
       # The PNG it passes through carries no orientation, so the frame is turned
       # upright here.
-      frame = quantise(upright(result, orientation), bits > 8 ? 16 : 8, dither: dither)
+      frame = quantise(Orientation.upright(result, orientation), bits > 8 ? 16 : 8, dither: dither)
       # Stored rather than compressed: a grainy frame shrinks by 5% at the
       # lightest setting, which cost 3s to write and a second more for heif-enc
       # to read back.
@@ -663,22 +665,6 @@ module FilmScan
       area ? scan.extract_area(*area) : scan
     end
 
-    # The scan's orientation tag, 1 when it has none.
-    def orientation_of(path)
-      header = Vips::Image.new_from_file(path)
-      header.get_typeof("orientation").zero? ? 1 : header.get("orientation")
-    rescue Vips::Error
-      1
-    end
-
-    def upright(image, orientation)
-      return image if orientation == 1
-
-      tagged = image.copy
-      tagged.set_type(GObject::GINT_TYPE, "orientation", orientation)
-      tagged.autorot
-    end
-
     # A float frame in 0..1 as whole numbers at the depth asked for.
     def quantise(result, bits, dither: true)
       top = (1 << bits) - 1
@@ -691,13 +677,27 @@ module FilmScan
     end
 
     # Per-frame overrides, keyed by filename without extension. Values use the
-    # long option names, so "saturation: 1.6" under "000057".
+    # long option names, so "saturation: 1.6" under "000057", and
+    # "orientation: 8" stands a frame upright when the lab's tag did not.
     def load_overrides(path)
       return {} unless path
       raw = YAML.safe_load(File.read(path), permitted_classes: [], aliases: false)
       raise "overrides file must be a mapping of frame name to settings" unless raw.is_a?(Hash)
       raw.each_with_object({}) do |(frame, settings), acc|
-        acc[frame.to_s] = settings.transform_keys { |k| k.to_s.tr("-", "_").to_sym }
+        settings = settings.transform_keys { |k| k.to_s.tr("-", "_").to_sym }
+        if settings.key?(:orientation) && !Orientation::VALUES.include?(settings[:orientation])
+          raise "orientation for #{frame} must be one of #{Orientation::VALUES.join(', ')}, numbered as EXIF does"
+        end
+
+        acc[frame.to_s] = settings
+      end
+    end
+
+    # The frames whose overrides say which way up they go, by scan path.
+    def orientations(paths, overrides)
+      paths.each_with_object({}) do |path, table|
+        turn = overrides.dig(File.basename(path, ".*"), :orientation)
+        table[path] = turn if turn
       end
     end
 
@@ -881,7 +881,8 @@ module FilmScan
                 "about each thing, and stop.") { |v| options[:audit] = v }
         opts.on("--only GLOB", "Filter frames, for example '0000[45]*'.") { |v| options[:only] = v }
         opts.on("--overrides FILE", "YAML of per-frame settings, keyed by filename",
-                "without extension.") { |v| options[:overrides] = v }
+                "without extension. An orientation (1, 3, 6 or 8, as EXIF",
+                "numbers them) stands up a frame the lab tagged wrongly.") { |v| options[:overrides] = v }
 
         opts.separator ""
         opts.on("-h", "--help", "Show this message.") do
