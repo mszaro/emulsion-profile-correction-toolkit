@@ -17,6 +17,9 @@ module FilmScan
     SHADOW = [12.0, 35.0].freeze
     # How far the colourfulness may be scaled either way.
     SPREAD_LIMIT = [0.7, 1.6].freeze
+    # The most a frame's colourfulness is raised once the strength is in, as a
+    # share. Boosts past about x1.3 read as bleached and oversaturated.
+    MAX_BOOST = 0.3
     # Pixels read from a frame for the fit.
     PER_FRAME = 20_000
     # A frame this dark at its median, in L*, is a dark scene rather than a
@@ -161,9 +164,10 @@ module FilmScan
       below = low.cast(:uchar)
       above = (low + 1).cast(:uchar)
       read = ->(table) { below.maplut(table) * (frac * -1 + 1) + above.maplut(table) * frac }
+      scale = scale_for(strength)
       light, weight, a_off, b_off = tables(strength).map { |table| read.call(table) }
       moved = [lab[1], lab[2]].zip([a_off, b_off]).map do |channel, offset|
-        channel + weight * (channel * (@spread - 1.0) + offset)
+        channel + weight * (channel * (scale - 1.0) + offset)
       end
       back = light.bandjoin(moved).copy(interpretation: :lab).colourspace(:scrgb)
       Colour.to_srgb(back).copy(interpretation: :srgb)
@@ -184,7 +188,8 @@ module FilmScan
       mid = @offsets[band].each_with_index.map { |offset, c| offset + (@spread - 1.0) * (@film ? @film[band][c] : 0.0) }
       format("  matching the look: median lightness %.0f -> %.0f, midtones move a* %+.1f b* %+.1f, " \
              "colourfulness x%.2f, at %.0f%% strength; frames darker than L* %.0f at their " \
-             "median keep their own look", *median, *mid, @spread, @strength * 100, LOW_KEY[0])
+             "median keep their own look", *median, *mid, 1.0 + @strength * (scale_for(@strength) - 1.0),
+             @strength * 100, LOW_KEY[0])
     end
 
     private
@@ -197,7 +202,7 @@ module FilmScan
         steps = (0..100).map(&:to_f)
         light = steps.map { |x| x + (lightness_at(x) - x) * strength }
         weight = steps.map { |x| shadow_weight(x) * strength }
-        offset = (0..1).map { |c| steps.map { |x| offset_at(x, c) } }
+        offset = (0..1).map { |c| steps.map { |x| offset_at(x, c, scale_for(strength)) } }
         [light, weight, *offset].map { |values| Vips::Image.new_from_array([values]).cast(:float) }
       end
     end
@@ -214,13 +219,29 @@ module FilmScan
       (t0 + (x - f0) / (f1 - f0) * (t1 - t0)).clamp(0.0, 100.0)
     end
 
-    def offset_at(x, channel)
-      return @offsets.first[channel] if x <= BANDS.first
-      return @offsets.last[channel] if x >= BANDS.last
+    # The colourfulness scale a frame gets at this strength, held so the boost
+    # it ends up with is no more than MAX_BOOST.
+    def scale_for(strength)
+      return @spread if @spread <= 1.0 || strength <= 0
+
+      1.0 + [@spread - 1.0, MAX_BOOST / strength].min
+    end
+
+    # A band's offset for a given scale. The fitted offsets carry the fitted
+    # scale, so a smaller one moves the film's average colour by what the scale
+    # no longer does, and it still lands on the matched rolls' average.
+    def band_offset(band, channel, scale)
+      film = @film ? @film[band][channel] : 0.0
+      @offsets[band][channel] + (@spread - scale) * film
+    end
+
+    def offset_at(x, channel, scale)
+      return band_offset(0, channel, scale) if x <= BANDS.first
+      return band_offset(BANDS.size - 1, channel, scale) if x >= BANDS.last
 
       upper = BANDS.index { |centre| centre >= x }
       t = (x - BANDS[upper - 1]) / (BANDS[upper] - BANDS[upper - 1]).to_f
-      @offsets[upper - 1][channel] * (1 - t) + @offsets[upper][channel] * t
+      band_offset(upper - 1, channel, scale) * (1 - t) + band_offset(upper, channel, scale) * t
     end
 
     def shadow_weight(x)

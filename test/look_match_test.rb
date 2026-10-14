@@ -78,6 +78,21 @@ class LookMatchTest < Minitest::Test
     assert_in_delta 0.0, mean_of(after, 2), 1.5, "the ground should match the ground, not the blue sky"
   end
 
+  # Past about x1.3 more colour reads as bleached and oversaturated, so the
+  # boost a frame gets is held there, and its average colour still lands on
+  # the matched rolls'.
+  def test_colourfulness_is_raised_no_more_than_the_cap
+    rng = Random.new(4)
+    film = Array.new(6000) { [30.0 + rng.rand * 50, rng.rand * 8 - 4, 10.0 + rng.rand * 8 - 4] }
+    target = Array.new(6000) { [30.0 + rng.rand * 50, rng.rand * 16 - 8, -2.0 + rng.rand * 16 - 8] }
+    after = FilmScan::LookMatch.pixels(FilmScan::LookMatch.fit(film, target).apply(srgb_from(film)), 6000, weighted: false)
+             .select { |l, _, _| l > 40 }
+    mean = after.sum { |px| px[2] } / after.size
+    spread = Math.sqrt(after.sum { |px| (px[2] - mean)**2 } / after.size)
+    assert_in_delta(-2.0, mean, 1.5)
+    assert_operator spread, :<, 2.31 * 1.3 * 1.08, "the boost should stop at x1.3"
+  end
+
   def test_survives_the_cache
     film = lab_pixels(-10, 12)
     look = FilmScan::LookMatch.fit(film, lab_pixels(5, -3, seed: 2))
