@@ -79,6 +79,36 @@ The sky detection and the roll's measurements see the frame the same way up as
 the written file. A contact sheet shows every frame the way it will be written,
 so it is the quickest place to spot one that needs this.
 
+`--orient` looks for such frames and prints overrides to paste in. It changes
+nothing itself:
+
+```sh
+bundle exec ./bin/filmscan --orient --overrides overrides.yml ~/scans/my-roll
+```
+
+It asks a small pretrained network which way up each frame looks. A suggestion
+is printed ready to paste only when the network gives the same answer however
+the frame is turned first, the lab left the frame untagged, and the answer
+turns it the way the roll's other portraits go. Anything else it found is
+printed commented out, with the reason, for a look first. With
+`--contact-sheet` it also draws those frames as written and as suggested in
+`orientation.jpg`. Ceilings and other frames shot straight up have no up for it
+to find.
+
+It needs the optional `onnxruntime` gem, which comes prebuilt for macOS, Linux
+and Windows. Run through `bundle exec`, it is installed with:
+
+```sh
+bundle config set --local with orient
+bundle install
+```
+
+Run as `./bin/filmscan` on its own, `gem install onnxruntime` does it.
+
+The network ([deep-image-orientation-detection](https://huggingface.co/DuarteBarbosa/deep-image-orientation-detection),
+MIT licence, 81 MB) is downloaded once into `~/.cache/film_scan/models` and
+checked against its digest.
+
 ## Matching another roll
 
 The profiles balance each film toward FujiFilm Superia in general. If you shot

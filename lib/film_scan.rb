@@ -8,6 +8,7 @@ Vips.cache_set_max_mem(256 * 1024 * 1024)
 require_relative "film_scan/version"
 require_relative "film_scan/colour"
 require_relative "film_scan/orientation"
+require_relative "film_scan/orientation_check"
 require_relative "film_scan/measurements"
 require_relative "film_scan/profile"
 require_relative "film_scan/analysis_cache"

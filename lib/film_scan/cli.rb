@@ -51,13 +51,13 @@ module FilmScan
         return 1
       end
       convert = flags[:convert_only]
-      unless flags[:profile] || convert
+      unless flags[:profile] || convert || flags[:orient]
         warn "which film is this? Pass --profile, one of: #{Profile.available.join(', ')}"
         return 1
       end
 
       begin
-        profile = convert ? nil : Profile.load(flags[:profile])
+        profile = convert || flags[:orient] ? nil : Profile.load(flags[:profile])
       rescue ArgumentError => e
         warn e.message
         return 1
@@ -92,6 +92,13 @@ module FilmScan
       files = find_files(source, options[:only])
       if files.empty?
         warn "no images matching #{options[:only] || '*'} in #{source}"
+        return 1
+      end
+
+      begin
+        return orient(source, files, destination, options) if options[:orient]
+      rescue ArgumentError => e
+        warn e.message
         return 1
       end
 
@@ -389,6 +396,41 @@ module FilmScan
         Process.setpriority(Process::PRIO_PROCESS, 0, GENTLE_NICENESS) if now < GENTLE_NICENESS
       end
       Vips.concurrency_set(threads) if threads&.positive?
+    end
+
+    # Which frames look the wrong way up, as overrides to check and paste in.
+    # Nothing is turned. With --contact-sheet, the frames it found are also
+    # drawn as written and as suggested.
+    def orient(source, files, destination, options)
+      all = find_files(source, nil)
+      Orientation.overrides = orientations(all, load_overrides(options[:overrides]))
+      puts "checking which way up #{files.size} frames are..."
+      check = orientation_check
+      findings = check.check(files, roll: all)
+      puts check.report(findings, files.size)
+      return 0 unless options[:contact_sheet] && findings.any?
+
+      FileUtils.mkdir_p(destination)
+      made = orientation_sheet(findings, File.basename(source)).write(File.join(destination, "orientation.jpg"))
+      puts "as written and as suggested -> #{made}"
+      0
+    end
+
+    def orientation_check
+      OrientationCheck.new
+    end
+
+    def orientation_sheet(findings, title)
+      sheet = ContactSheet.new("#{title}: which way up")
+      findings.each do |found|
+        image = Orientation.thumbnail(found.path, ContactSheet::TILE).copy_memory
+        image = image[0..2] if image.bands > 3
+        image = image.cast(:float) / (image.format == :ushort ? 65535.0 : 255.0)
+        sheet.add(image, "#{found.stem} as written")
+        turn = (OrientationCheck::TAG_TURN[found.suggested] - OrientationCheck::TAG_TURN[found.written]) % 360
+        sheet.add(turn.zero? ? image : image.rot("d#{turn}"), "#{found.stem} as #{found.suggested}")
+      end
+      sheet
     end
 
     # The diagnosis on its own, with no frame written.
@@ -879,6 +921,9 @@ module FilmScan
         opts.on("--explain", "Say what the roll shows is wrong with it, and stop.") { |v| options[:explain] = v }
         opts.on("--audit", "Say what the roll shows and what the profile does",
                 "about each thing, and stop.") { |v| options[:audit] = v }
+        opts.on("--orient", "Say which frames look the wrong way up, as overrides",
+                "to check and paste in, and stop. Needs no profile, and needs",
+                "the onnxruntime gem: see the README.") { |v| options[:orient] = v }
         opts.on("--only GLOB", "Filter frames, for example '0000[45]*'.") { |v| options[:only] = v }
         opts.on("--overrides FILE", "YAML of per-frame settings, keyed by filename",
                 "without extension. An orientation (1, 3, 6 or 8, as EXIF",
