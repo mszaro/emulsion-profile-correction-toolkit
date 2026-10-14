@@ -571,6 +571,9 @@ module FilmScan
     # for every quality from 95 up and cannot write monochrome; this takes the
     # HEVC quantiser directly, keeps full colour resolution (4:4:4) and writes
     # black and white as true monochrome.
+    # The shortest frame written in slices.
+    SLICED_HEIGHT = 1024
+
     HEIF_ENC = ENV.fetch("PATH", "").split(File::PATH_SEPARATOR).map { |dir| File.join(dir, "heif-enc") }
                   .find { |path| File.executable?(path) }
 
@@ -595,7 +598,9 @@ module FilmScan
       args += ["-p", "x265:pools=#{Vips.concurrency}"]
       # In slices, since libde265, the decoder behind libheif and so most
       # software outside Apple's, cannot open a picture over about 16 MB in one.
-      args += ["-p", "x265:slices=4"]
+      # Only a frame this tall can get near that, and four slices of a short one
+      # decode wrong.
+      args += ["-p", "x265:slices=4"] if frame.height >= SLICED_HEIGHT
       args += quality >= 100 ? ["-L"] : ["-p", "x265:qp=#{qp}"]
       Thread.new do
         Thread.current.report_on_exception = false

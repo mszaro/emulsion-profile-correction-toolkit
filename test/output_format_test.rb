@@ -123,17 +123,28 @@ class OutputFormatTest < Minitest::Test
   end
 
   # libde265, the decoder behind libheif and most software outside Apple's,
-  # cannot open a picture over about 16 MB in one piece, and a corrected frame
-  # is often more, so HEIC is always written in slices.
-  def test_heic_is_written_in_slices
+  # cannot open a picture over about 16 MB in one piece, so a frame tall enough
+  # to reach that is written in slices. A short one is not: four slices of a
+  # few rows decode wrong.
+  def test_only_tall_heic_frames_are_sliced
     skip "heif-enc is not installed" unless FilmScan::CLI::HEIF_ENC
     calls = []
     @cli.define_singleton_method(:system) do |*args, **opts|
       calls << args
       super(*args, **opts)
     end
+    tall = (Vips::Image.black(64, FilmScan::CLI::SLICED_HEIGHT, bands: 3) + 0.5).copy(interpretation: :srgb)
+    heif_info(frame: tall) { |info, _| assert_match(/4:4:4/, info) }
     heif_info { |info, _| assert_match(/4:4:4/, info) }
-    assert(calls.any? { |args| args.include?("x265:slices=4") }, calls.inspect)
+    assert_equal [true, false], calls.map { |args| args.include?("x265:slices=4") }
+  end
+
+  def test_a_short_heic_frame_decodes_as_written
+    skip "heif-enc is not installed" unless FilmScan::CLI::HEIF_ENC
+    heif_info do |_, image|
+      written = image[0..2].cast(:float) / (image.format == :ushort ? 65535.0 : 255.0)
+      assert_operator (written - @frame).abs.max, :<, 0.02
+    end
   end
 
   # heif-enc runs on a thread of its own, and a failure there still reaches
