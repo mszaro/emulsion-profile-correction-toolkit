@@ -585,6 +585,9 @@ module FilmScan
       args += ["-p", "chroma=444"] if result.bands > 1
       # The encoder starts a thread per core of its own, so it follows --threads.
       args += ["-p", "x265:pools=#{Vips.concurrency}"]
+      # In slices, since libde265, the decoder behind libheif and so most
+      # software outside Apple's, cannot open a picture over about 16 MB in one.
+      args += ["-p", "x265:slices=4"]
       args += quality >= 100 ? ["-L"] : ["-p", "x265:qp=#{((100 - quality) * 0.51).round.clamp(0, 51)}"]
       Thread.new do
         Thread.current.report_on_exception = false

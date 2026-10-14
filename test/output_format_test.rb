@@ -122,6 +122,20 @@ class OutputFormatTest < Minitest::Test
     end
   end
 
+  # libde265, the decoder behind libheif and most software outside Apple's,
+  # cannot open a picture over about 16 MB in one piece, and a corrected frame
+  # is often more, so HEIC is always written in slices.
+  def test_heic_is_written_in_slices
+    skip "heif-enc is not installed" unless FilmScan::CLI::HEIF_ENC
+    calls = []
+    @cli.define_singleton_method(:system) do |*args, **opts|
+      calls << args
+      super(*args, **opts)
+    end
+    heif_info { |info, _| assert_match(/4:4:4/, info) }
+    assert(calls.any? { |args| args.include?("x265:slices=4") }, calls.inspect)
+  end
+
   # heif-enc runs on a thread of its own, and a failure there still reaches
   # the run and takes the temporary files with it.
   def test_a_failed_heic_encode_is_reported_and_cleaned_up
