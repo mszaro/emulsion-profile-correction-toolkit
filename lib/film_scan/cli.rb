@@ -2,6 +2,7 @@ require "optparse"
 require "fileutils"
 require "yaml"
 require "etc"
+require "open3"
 
 module FilmScan
   # Command line front end. Corrects every scan in a folder and writes the
@@ -63,6 +64,10 @@ module FilmScan
       end
       # The profile sets the picture, and anything given on the command line wins.
       options = DEFAULTS.merge(profile ? profile.settings : {}).merge(flags)
+      if options[:encoder] == "apple" && (reason = AppleHeic.unavailable_reason)
+        warn reason
+        return 1
+      end
 
       begin
         reference = options[:reference] && Reference.load(options[:reference])
@@ -153,7 +158,7 @@ module FilmScan
 
     # Settings the roll's fits never see: where and how frames are written,
     # and the strengths put on the raw fits after they are loaded.
-    NOT_IN_FITS = %i[out only threads gentle previews contact_sheet format quality bits overrides
+    NOT_IN_FITS = %i[out only threads gentle previews contact_sheet format quality bits encoder overrides
                      explain audit convert_only crop profile roll_tone roll_fit flat_field
                      match_strength].freeze
 
@@ -485,17 +490,17 @@ module FilmScan
       { "tif" => "tiff", "jpg" => "jpeg", "heif" => "heic", "jpeg2000" => "jp2" }.fetch(format, format)
     end
 
-    def depth_for(format, bits)
+    def depth_for(format, bits, encoder = "x265")
       offered = DEPTHS.fetch(format, [8])
-      return natural_depth(format) unless bits
+      return natural_depth(format, encoder) unless bits
 
       offered.select { |d| d <= bits }.max || offered.min
     end
 
-    # libheif's own encoder writes ten bits well; libvips' measured worse than
-    # its eight, so eight is what HEIC gets without it.
-    def natural_depth(format)
-      format == "heic" && HEIF_ENC ? 10 : NATURAL_DEPTH.fetch(format, 8)
+    # libheif's own encoder writes ten bits well, as does Apple's; libvips'
+    # measured worse than its eight, so eight is what HEIC gets without them.
+    def natural_depth(format, encoder = "x265")
+      format == "heic" && (HEIF_ENC || encoder == "apple") ? 10 : NATURAL_DEPTH.fetch(format, 8)
     end
 
     # Written under a temporary name and renamed when complete, so an
@@ -528,16 +533,17 @@ module FilmScan
       nil
     end
 
-    # Returns the thread running heif-enc when `wait` is false and there is one.
+    # Returns the thread running the HEIC encoder when `wait` is false and there is one.
     def save(result, partial, format, options, orientation, wait: true)
-      bits = depth_for(format, options[:bits])
+      encoder = options[:encoder] || "x265"
+      bits = depth_for(format, options[:bits], encoder)
       quality = options[:quality]
       # A black and white frame is kept as one channel.
       result = result[0] if options[:monochrome]
       # A straight conversion is already whole numbers, and dither would only add noise.
       dither = !options[:convert_only]
-      if format == "heic" && HEIF_ENC
-        encoding = encode_heic(result, partial, bits, quality, orientation, dither)
+      if format == "heic" && (HEIF_ENC || encoder == "apple")
+        encoding = encode_heic(result, partial, bits, quality, orientation, dither, encoder: encoder)
         return wait ? encoding.value : encoding
       end
 
@@ -568,11 +574,12 @@ module FilmScan
     HEIF_ENC = ENV.fetch("PATH", "").split(File::PATH_SEPARATOR).map { |dir| File.join(dir, "heif-enc") }
                   .find { |path| File.executable?(path) }
 
-    # The PNG is written here and heif-enc runs in the thread returned, which
-    # leaves the next frame free to start while this one encodes.
-    def encode_heic(result, partial, bits, quality, orientation, dither = true)
+    # The PNG is written here and the encoder runs in the thread returned,
+    # which leaves the next frame free to start while this one encodes.
+    def encode_heic(result, partial, bits, quality, orientation, dither = true, encoder: "x265")
       png = "#{partial}.png"
       heic = "#{partial}.heic"
+      apple = encoder == "apple" && !heif_enc_instead?(result.bands, bits, quality)
       # The PNG it passes through carries no orientation, so the frame is turned
       # upright here.
       frame = quantise(upright(result, orientation), bits > 8 ? 16 : 8, dither: dither)
@@ -580,6 +587,7 @@ module FilmScan
       # lightest setting, which cost 3s to write and a second more for heif-enc
       # to read back.
       tagged(frame, bits).pngsave(png, compression: 0)
+      qp = ((100 - quality) * 0.51).round.clamp(0, 51)
       args = [HEIF_ENC, "-o", heic]
       args += ["-b", bits.to_s] if bits > 8
       args += ["-p", "chroma=444"] if result.bands > 1
@@ -588,11 +596,13 @@ module FilmScan
       # In slices, since libde265, the decoder behind libheif and so most
       # software outside Apple's, cannot open a picture over about 16 MB in one.
       args += ["-p", "x265:slices=4"]
-      args += quality >= 100 ? ["-L"] : ["-p", "x265:qp=#{((100 - quality) * 0.51).round.clamp(0, 51)}"]
+      args += quality >= 100 ? ["-L"] : ["-p", "x265:qp=#{qp}"]
       Thread.new do
         Thread.current.report_on_exception = false
-        ok = system(*args, png, out: File::NULL, err: File::NULL)
-        raise "heif-enc could not write #{File.basename(heic)}" unless ok && File.exist?(heic)
+        unless apple && apple_wrote?(png, heic, qp, bits)
+          ok = system(*args, png, out: File::NULL, err: File::NULL)
+          raise "heif-enc could not write #{File.basename(heic)}" unless ok && File.exist?(heic)
+        end
 
         File.rename(heic, partial)
       ensure
@@ -602,6 +612,35 @@ module FilmScan
     rescue StandardError
       File.delete(png) if png && File.exist?(png)
       raise
+    end
+
+    # Apple's hardware encoder, at the same QP as x265. It refuses a frame
+    # denser than it has coded cleanly, which heif-enc then writes, and says
+    # why when it fails, which goes into the error.
+    def apple_wrote?(png, heic, qp, bits)
+      said, status = Open3.capture2e(*AppleHeic.command(png, heic, qp: qp, bits: bits, threads: Vips.concurrency))
+      said = said.strip.delete_prefix("apple-heic: ")
+      if status.exitstatus == AppleHeic::REFUSED
+        raise "#{said}, and heif-enc is not installed to write it instead" unless HEIF_ENC
+
+        puts "  #{File.basename(heic, '.partial.heic')}: heif-enc writes it, #{said}"
+        return false
+      end
+      raise "Apple's encoder could not write #{File.basename(heic)}: #{said}" unless status.success? && File.exist?(heic)
+
+      true
+    end
+
+    # Whether heif-enc writes a frame Apple's encoder was asked for, which is
+    # said once a run.
+    def heif_enc_instead?(bands, bits, quality)
+      reason = AppleHeic.handed_back(bands, bits, quality)
+      return false unless reason
+      raise "heif-enc is needed for #{reason}, and it is not installed" unless HEIF_ENC
+
+      @handed_back ||= {}
+      puts "  heif-enc writes #{reason}" unless @handed_back[reason]
+      @handed_back[reason] = true
     end
 
     # A quantised frame tagged for its depth and its channels, since the savers
@@ -813,6 +852,12 @@ module FilmScan
                 "100 asks HEIC and JPEG 2000 for lossless, which on HEIC is",
                 "the only step up: its encoder gives the same file at 95 and",
                 "at 100. Always 4:4:4.") { |v| options[:quality] = v }
+        opts.on("--encoder NAME", %w[x265 apple],
+                "HEIC encoder: x265 (default), or apple, Apple's hardware",
+                "encoder on macOS. apple is five to seven times faster and",
+                "leaves the cores free, for files about 15% larger. Black and",
+                "white, and frames denser than it was tested on, go to x265.",
+                *(AppleHeic.available? ? [] : ["apple needs macOS and `rake apple_heic` first."])) { |v| options[:encoder] = v }
         opts.on("--previews", "--jpeg", "Also write 1600px preview JPEGs.") { |v| options[:previews] = v }
         opts.on("--[no-]measured-frame-balance",
                 "Hold the frame balance back on a roll whose frames measure",

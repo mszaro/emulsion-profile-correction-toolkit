@@ -23,6 +23,7 @@ require_relative "film_scan/sky"
 require_relative "film_scan/warm_light"
 require_relative "film_scan/diagnosis"
 require_relative "film_scan/contact_sheet"
+require_relative "film_scan/apple_heic"
 require_relative "film_scan/lost_colour"
 require_relative "film_scan/chroma_map"
 require_relative "film_scan/reference"
@@ -43,6 +44,8 @@ module FilmScan
   DEFAULTS = {
     format: nil,
     quality: 98,
+    # heif-enc with x265, or Apple's hardware encoder on macOS.
+    encoder: "x265",
     bits: nil,
     roll_fit: 1.0,
     reference: nil,
