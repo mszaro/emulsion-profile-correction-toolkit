@@ -107,7 +107,8 @@ module FilmScan
       def measure(image)
         fine = sigma(FINE_SIGMA, image)
         coarse = fine * COARSE_RATIO
-        luma = Colour.clamp01(luma_of(image))
+        # Settled, since all six readings below are taken from it.
+        luma = Colour.clamp01(luma_of(image)).copy_memory
         tiles = tile_stats(inset(luma), fine, coarse, sigma(GRAIN_SIGMA, image))
         return NOTHING if tiles.empty?
 
@@ -167,8 +168,10 @@ module FilmScan
 
         width = (luma.width / size) * size
         height = (luma.height / size) * size
+        # Settled before the shrink, which otherwise works every blur out again
+        # for each tile it reads: two seconds a frame, against a fifth of one.
         grid = bands.first.bandjoin(bands.drop(1)).extract_area(0, 0, width, height)
-                    .shrink(size, size)
+                    .copy_memory.shrink(size, size)
         # Cast before reading it back: a frame that reached here through the
         # colour work is double, and unpacking that as float returns nonsense.
         rows = grid.cast(:float).write_to_memory.unpack("f*").each_slice(bands.size).map do |t|

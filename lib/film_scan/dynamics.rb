@@ -149,6 +149,8 @@ module FilmScan
       return image if measurement.nil? || amount <= 0 || measurement.quiet?
 
       out = reconstruct(image, measurement, amount, lost)
+      # Settled, since the tone map reads it twice and once through a shrink.
+      out = out.copy_memory unless out.equal?(image)
       tone_map(out, measurement, amount).copy(interpretation: :srgb)
     end
 
