@@ -17,10 +17,19 @@ class AppleHeicRoutingTest < Minitest::Test
   # minitest/mock, and plain `rake test` runs it.
   def replacing(target, name, impl)
     original = target.method(name)
-    target.singleton_class.send(:define_method, name, impl)
+    quietly { target.singleton_class.send(:define_method, name, impl) }
     yield
   ensure
-    target.singleton_class.send(:define_method, name, original)
+    quietly { target.singleton_class.send(:define_method, name, original) }
+  end
+
+  # Redefining a method on purpose, without Ruby warning that it was.
+  def quietly
+    verbose = $VERBOSE
+    $VERBOSE = nil
+    yield
+  ensure
+    $VERBOSE = verbose
   end
 
   def with_helper(script)
