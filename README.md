@@ -208,8 +208,9 @@ fast. It needs a small library, built once (macOS 15 or later):
 bundle exec rake apple_engine
 ```
 
-Without it, `--engine apple` stops and says how to build it. libvips stays
-the default.
+Once it is built, it is the default on that Mac, and `--engine vips` goes
+back to libvips. Without it, libvips is the default and `--engine apple`
+stops and says how to build it.
 
 ## Extra fixes
 

@@ -68,6 +68,7 @@ module FilmScan
         warn reason
         return 1
       end
+      options[:engine] ||= Metal.available? ? "apple" : "vips"
       if options[:engine] == "apple" && (reason = Metal.unavailable_reason)
         warn reason
         return 1
@@ -910,8 +911,9 @@ module FilmScan
                 "white, and frames denser than it was tested on, go to x265.",
                 *(AppleHeic.available? ? [] : ["apple needs macOS and `rake apple_heic` first."])) { |v| options[:encoder] = v }
         opts.on("--engine NAME", %w[vips apple],
-                "What works out each frame: vips (default), or apple, which",
-                "runs the per-pixel colour work as Metal kernels on macOS.",
+                "What works out each frame: apple, which runs the per-pixel",
+                "colour work and the blurs as Metal kernels, or vips. apple is",
+                "the default on a Mac where `rake apple_engine` has built it.",
                 "Frames come out the same to within float rounding.",
                 *(Metal.available? ? [] : ["apple needs macOS and `rake apple_engine` first."])) { |v| options[:engine] = v }
         opts.on("--previews", "--jpeg", "Also write 1600px preview JPEGs.") { |v| options[:previews] = v }

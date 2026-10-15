@@ -49,8 +49,9 @@ module FilmScan
     quality: 98,
     # heif-enc with x265, or Apple's hardware encoder on macOS.
     encoder: "x265",
-    # libvips, or Metal for the per-pixel work on macOS.
-    engine: "vips",
+    # Metal for the per-pixel work on a Mac where `rake apple_engine` has
+    # built it, libvips everywhere else. Chosen when a run starts.
+    engine: nil,
     bits: nil,
     roll_fit: 1.0,
     reference: nil,
