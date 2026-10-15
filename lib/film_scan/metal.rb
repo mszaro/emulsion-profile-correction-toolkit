@@ -21,6 +21,9 @@ module FilmScan
 
     def self.available? = unavailable_reason.nil?
 
+    # The engine a run uses when it asks for none.
+    def self.default_engine = available? ? "apple" : "vips"
+
     module Native
       extend FFI::Library
     end

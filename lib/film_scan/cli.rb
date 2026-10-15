@@ -68,7 +68,7 @@ module FilmScan
         warn reason
         return 1
       end
-      options[:engine] ||= Metal.available? ? "apple" : "vips"
+      options[:engine] ||= Metal.default_engine
       if options[:engine] == "apple" && (reason = Metal.unavailable_reason)
         warn reason
         return 1
