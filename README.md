@@ -188,6 +188,29 @@ the helper prebuilt: build it with `rake apple_heic` on arm64, add
 `libexec/apple-heic` to the gem's files and set its platform to
 `arm64-darwin`.
 
+### Metal engine (macOS, optional)
+
+`--engine apple` works out each frame's colour on the GPU. The correction is
+the same Ruby code either way: under this engine the per-pixel steps it asks
+libvips for are gathered into Metal kernels, one per run of steps, and the
+blurs run on the GPU with libvips' own masks. Whatever the engine does not
+cover (resizing, measuring, the roll analysis) still goes to libvips.
+
+Frames match the libvips engine to within float rounding. On four Lucky SHD
+frames, about one pixel in a hundred moved by one level in ten bits, and a
+few thousand at the very edge of the scan moved by up to four. On 20 frames
+of the same roll, written as HEIC with `--encoder apple`, a run took 59
+seconds and 125 seconds of CPU, against 164 seconds and 2,161 with libvips.
+With x265 the GPU is waiting on the encoder, and a run is about twice as
+fast. It needs a small library, built once (macOS 15 or later):
+
+```sh
+bundle exec rake apple_engine
+```
+
+Without it, `--engine apple` stops and says how to build it. libvips stays
+the default.
+
 ## Extra fixes
 
 The film profiles handle colour and tone. Use `--fix` to also recover shadows

@@ -68,6 +68,10 @@ module FilmScan
         warn reason
         return 1
       end
+      if options[:engine] == "apple" && (reason = Metal.unavailable_reason)
+        warn reason
+        return 1
+      end
 
       begin
         reference = options[:reference] && Reference.load(options[:reference])
@@ -167,7 +171,7 @@ module FilmScan
 
     # Settings the roll's fits never see: where and how frames are written,
     # and the strengths put on the raw fits after they are loaded.
-    NOT_IN_FITS = %i[out only threads gentle previews contact_sheet format quality bits encoder overrides
+    NOT_IN_FITS = %i[out only threads gentle previews contact_sheet format quality bits encoder engine overrides
                      explain audit convert_only crop profile roll_tone roll_fit flat_field
                      match_strength].freeze
 
@@ -905,6 +909,11 @@ module FilmScan
                 "leaves the cores free, for files about 15% larger. Black and",
                 "white, and frames denser than it was tested on, go to x265.",
                 *(AppleHeic.available? ? [] : ["apple needs macOS and `rake apple_heic` first."])) { |v| options[:encoder] = v }
+        opts.on("--engine NAME", %w[vips apple],
+                "What works out each frame: vips (default), or apple, which",
+                "runs the per-pixel colour work as Metal kernels on macOS.",
+                "Frames come out the same to within float rounding.",
+                *(Metal.available? ? [] : ["apple needs macOS and `rake apple_engine` first."])) { |v| options[:engine] = v }
         opts.on("--previews", "--jpeg", "Also write 1600px preview JPEGs.") { |v| options[:previews] = v }
         opts.on("--[no-]measured-frame-balance",
                 "Hold the frame balance back on a roll whose frames measure",

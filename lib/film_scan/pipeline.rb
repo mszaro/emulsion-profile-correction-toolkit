@@ -47,6 +47,18 @@ module FilmScan
 
     # The correction on a loaded frame, a float sRGB image in 0..1.
     def render(scan)
+      return correct(scan) unless @o[:engine] == "apple"
+
+      # The frame starts as a Fused image and every stage builds on it as it
+      # would on a vips one; libvips gets back what Metal cannot do.
+      Fused.teach_vips
+      done = correct(Fused.leaf(scan))
+      done.is_a?(Fused) ? done.vips : done
+    end
+
+    private
+
+    def correct(scan)
       scan = trim(scan)
       @lost = lost_in(scan)
       return render_monochrome(scan) if @o[:monochrome]
@@ -93,8 +105,6 @@ module FilmScan
       # push pixels back over the top after the stretch has fitted them.
       Gamut.fit(srgb, headroom_for(nil))
     end
-
-    private
 
     # A black and white frame. Labs scan it in colour and leave it tinted, so it
     # is made neutral grey first, then stretched, given contrast, opened at the

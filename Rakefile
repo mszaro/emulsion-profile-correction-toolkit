@@ -21,3 +21,17 @@ end
 
 desc "Build the helper for --encoder apple (macOS, needs Xcode's command line tools)"
 task apple_heic: HELPER
+
+# The Metal library behind --engine apple, built the same way.
+ENGINE = "libexec/libfilmscan-engine.dylib".freeze
+ENGINE_SOURCE = "ext/apple_engine/apple_engine.swift".freeze
+
+file ENGINE => ENGINE_SOURCE do
+  abort "--engine apple is macOS only" unless RbConfig::CONFIG["host_os"].include?("darwin")
+  mkdir_p File.dirname(ENGINE)
+  sh "swiftc", "-O", "-emit-library", "-target", "#{RbConfig::CONFIG['host_cpu']}-apple-macos15", "-o", ENGINE,
+     ENGINE_SOURCE
+end
+
+desc "Build the Metal library for --engine apple (macOS, needs Xcode's command line tools)"
+task apple_engine: ENGINE

@@ -31,6 +31,7 @@ require_relative "film_scan/chroma_map"
 require_relative "film_scan/reference"
 require_relative "film_scan/gamut_fit"
 require_relative "film_scan/look_match"
+require_relative "film_scan/fused"
 require_relative "film_scan/pipeline"
 
 # Corrects lab scans of film stocks the scanner had no profile for. What is
@@ -48,6 +49,8 @@ module FilmScan
     quality: 98,
     # heif-enc with x265, or Apple's hardware encoder on macOS.
     encoder: "x265",
+    # libvips, or Metal for the per-pixel work on macOS.
+    engine: "vips",
     bits: nil,
     roll_fit: 1.0,
     reference: nil,
