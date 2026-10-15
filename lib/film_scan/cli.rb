@@ -174,7 +174,7 @@ module FilmScan
     # and the strengths put on the raw fits after they are loaded.
     NOT_IN_FITS = %i[out only threads gentle previews contact_sheet format quality bits encoder engine overrides
                      explain audit convert_only crop profile roll_tone roll_fit flat_field
-                     match_strength].freeze
+                     match_strength look look_strength].freeze
 
     MATCH_FILE = "match-reference.yml"
 
@@ -231,7 +231,7 @@ module FilmScan
         flat: options[:fix].include?(:flat) && options[:flat_field].positive?,
         tilt: reference && options[:frame_balance].positive? && options[:lamp_guard].positive?
       }
-      return {} unless want.values.any?
+      return film_look({}, options) unless want.values.any?
 
       # The tuning, the tilt and the look all read frames at the same size.
       @thumbs = {}
@@ -306,9 +306,19 @@ module FilmScan
         fits[:look].strength = options[:match_strength]
         puts fits[:look].report
       end
-      fits.compact
+      film_look(fits, options).compact
     ensure
       @thumbs = nil
+    end
+
+    # The film's own look from its profile, for a roll --match gave none.
+    def film_look(fits, options)
+      return fits if fits[:look] || !options[:look] || options[:monochrome] || !options[:look_strength].to_f.positive?
+
+      fits[:look] = LookMatch.from_cache(options[:look])
+      fits[:look].strength = options[:look_strength]
+      puts fits[:look].report(as: "the film's own look")
+      fits
     end
 
     # Frames read from each roll for the look, spread through it.
@@ -796,6 +806,10 @@ module FilmScan
         opts.on("--match-strength FLOAT", Float,
                 "How much of the matched rolls' look to carry over, 0 to 1",
                 "(default #{DEFAULTS[:match_strength]}).") { |v| options[:match_strength] = v }
+        opts.on("--look-strength FLOAT", Float,
+                "How much of the film's own look, from its profile, to carry",
+                "over when there is no --match, 0 to 1 (the profile's own, or",
+                "#{DEFAULTS[:look_strength]}).") { |v| options[:look_strength] = v }
         opts.on("--roll-balance FLOAT", Float,
                 "Strength of the balance toward the reference, 0 to 1",
                 "(default #{DEFAULTS[:roll_balance]}). Only with a reference.") { |v| options[:roll_balance] = v }

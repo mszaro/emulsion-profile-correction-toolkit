@@ -68,3 +68,72 @@ contrast: 0.10
 
 # Coarse grain with a colour speckle in the lifted shadows.
 chroma: 0.7
+
+# The film's own look against rolls shot alongside it, learned by
+# tools/measure_look.rb from 6 pairs. Lightness and the average colour at each brightness; --match gives a
+# roll its own instead.
+#   49607 Ilford Harman Phoenix with 49608 FujiFilm Superia 200
+#   49606 Ilford Harman Phoenix with 49612 FujiFilm Superia 400, 49613 FujiFilm Superia 400
+#   49605 Ilford Harman Phoenix with 49614 FujiFilm Superia 400
+#   50192 Ilford Harman Phoenix with 49614 FujiFilm Superia 400
+#   51055 Ilford Harman Phoenix with 51052 FujiFilm Superia 400
+#   51056 Ilford Harman Phoenix with 51050 FujiFilm Superia 400, 51047 FujiFilm Superia 400
+look:
+  lightness:
+    - [-8.49, -2.78]
+    - [3.35, 9.47]
+    - [6.01, 13.40]
+    - [8.72, 17.05]
+    - [11.23, 20.33]
+    - [13.60, 23.22]
+    - [16.03, 25.92]
+    - [18.58, 28.18]
+    - [21.10, 30.45]
+    - [23.63, 32.75]
+    - [26.16, 35.03]
+    - [28.68, 37.31]
+    - [31.17, 39.55]
+    - [33.63, 41.70]
+    - [36.09, 43.74]
+    - [38.56, 45.81]
+    - [41.05, 47.94]
+    - [43.54, 50.06]
+    - [45.98, 52.21]
+    - [48.36, 54.28]
+    - [50.73, 56.28]
+    - [53.09, 58.19]
+    - [55.38, 60.07]
+    - [57.70, 61.99]
+    - [60.05, 63.96]
+    - [62.31, 65.92]
+    - [64.54, 67.82]
+    - [66.90, 69.69]
+    - [69.26, 71.48]
+    - [71.63, 73.22]
+    - [73.99, 74.85]
+    - [76.46, 76.64]
+    - [78.86, 78.27]
+    - [81.38, 80.16]
+    - [84.03, 82.39]
+    - [86.46, 84.94]
+    - [88.98, 87.67]
+    - [91.39, 90.30]
+    - [93.52, 92.87]
+    - [95.92, 95.01]
+    - [109.41, 110.44]
+  offsets:
+    - [-1.07, 0.92]
+    - [-0.96, -2.86]
+    - [-2.99, -7.58]
+    - [-5.93, -7.63]
+    - [-5.83, -4.41]
+    - [-1.38, 1.82]
+  film:
+    - [-1.93, 0.99]
+    - [-2.37, 3.52]
+    - [0.61, 2.88]
+    - [2.85, -1.00]
+    - [2.56, -2.34]
+    - [2.05, -1.02]
+  spread: 1.0
+look_strength: 1.0

@@ -16,7 +16,7 @@ module FilmScan
                   roll_tone lost_colour chroma_map chroma_shape
                   highlight_headroom sky_neutral sky_floor flat_field healthy_spread
                   sky_headroom measured_frame_balance lamp_guard keep_warmth sharpness frame_tint_limit
-                  monochrome recovery].freeze
+                  monochrome recovery look look_strength].freeze
 
     attr_reader :id, :name, :settings, :healthy_spread
 
@@ -54,6 +54,13 @@ module FilmScan
                             gains.all? { |g| g.is_a?(Array) && g.size == 3 && g.all?(Numeric) })
         raise ArgumentError, "profile #{id} needs film_gains as [red, green, blue] for each of " \
                              "#{ColourBalance::TONES.size} tones; tools/measure_film.rb writes them"
+      end
+
+      look = data[:look]
+      unless look.nil? || LookMatch.valid?(look)
+        raise ArgumentError, "profile #{id} has a look tools/measure_look.rb did not write: it needs lightness " \
+                             "as [from, to] pairs, offsets as [a, b] for each of #{LookMatch::BANDS.size} bands, " \
+                             "and a spread"
       end
 
       @id = id

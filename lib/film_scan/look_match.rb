@@ -101,6 +101,15 @@ module FilmScan
       Colour.to_linear(srgb).copy(interpretation: :scrgb).colourspace(:lab).cast(:float)
     end
 
+    # Whether data read from a profile or a cache has the shape of a look.
+    def self.valid?(data)
+      pair = ->(x) { x.is_a?(Array) && x.size == 2 && x.all?(Numeric) }
+      data.is_a?(Hash) && data[:lightness].is_a?(Array) && data[:lightness].size >= 2 &&
+        data[:lightness].all?(&pair) && data[:offsets].is_a?(Array) && data[:offsets].size == BANDS.size &&
+        data[:offsets].all?(&pair) && data[:spread].is_a?(Numeric) &&
+        (data[:film].nil? || (data[:film].is_a?(Array) && data[:film].size == BANDS.size && data[:film].all?(&pair)))
+    end
+
     def self.from_cache(data)
       new(lightness: data[:lightness], offsets: data[:offsets], spread: data[:spread], film: data[:film])
     end
@@ -180,13 +189,13 @@ module FilmScan
         "film" => @film&.map(&:dup) }.compact
     end
 
-    def report
+    def report(as: "matching the look")
       median = @lightness[@lightness.size / 2]
       # How far the midtones' average colour moves, which is the offset less
       # what the colourfulness scale already did to the film's average.
       band = BANDS.index(55)
       mid = @offsets[band].each_with_index.map { |offset, c| offset + (@spread - 1.0) * (@film ? @film[band][c] : 0.0) }
-      format("  matching the look: median lightness %.0f -> %.0f, midtones move a* %+.1f b* %+.1f, " \
+      format("  #{as}: median lightness %.0f -> %.0f, midtones move a* %+.1f b* %+.1f, " \
              "colourfulness x%.2f, at %.0f%% strength; frames darker than L* %.0f at their " \
              "median keep their own look", *median, *mid, 1.0 + @strength * (scale_for(@strength) - 1.0),
              @strength * 100, LOW_KEY[0])

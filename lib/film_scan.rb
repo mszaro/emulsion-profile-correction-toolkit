@@ -69,7 +69,12 @@ module FilmScan
     # correction is measured on the picture alone.
     crop: false,
     # How much of the matched rolls' look --match carries over, 0 to 1.
-    match_strength: 1.0,
+match_strength: 1.0,
+# A film's own look, learned by tools/measure_look.rb from rolls shot
+# alongside rolls a lab scanned well, and how much of it a roll takes.
+# --match gives a roll its own in its place.
+look: nil,
+look_strength: 1.0,
     # Off unless a profile asks: the falloff is measured across a roll, and a
     # roll of skies and dark ground does not average out the way the fit needs.
     flat_field: 0.0,

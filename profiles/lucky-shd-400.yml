@@ -90,3 +90,65 @@ chroma: 0.7
 lamp_guard: 0.5
 
 sharpness: 0.5
+
+# The film's own look against rolls shot alongside it, learned by
+# tools/measure_look.rb from 6 pairs. Lightness only; --match gives a
+# roll its own instead.
+#   49603 Lucky SHD 400 with 49608 FujiFilm Superia 200, 49609 FujiFilm Superia 200, 49610 FujiFilm Superia 200
+#   49604 Lucky SHD 400 with 49608 FujiFilm Superia 200, 49609 FujiFilm Superia 200, 49610 FujiFilm Superia 200
+#   49602 Lucky SHD 400 with 49612 FujiFilm Superia 400, 49613 FujiFilm Superia 400
+#   51054 Film type Uncatalogued with 51046 FujiFilm Superia 400, 51048 FujiFilm Superia 400, 51049 FujiFilm Superia 400
+#   50193 Lucky SHD 400 with 50191 FujiFilm Superia 400, 50188 Kodak Gold 200, 50189 Kodak Gold 200, 50190 Kodak Gold 200
+#   50194 Lucky SHD 400 with 50191 FujiFilm Superia 400, 50188 Kodak Gold 200, 50189 Kodak Gold 200, 50190 Kodak Gold 200
+look:
+  lightness:
+    - [-8.67, -2.77]
+    - [3.07, 8.15]
+    - [5.17, 11.18]
+    - [7.43, 14.37]
+    - [9.97, 17.43]
+    - [12.83, 20.57]
+    - [15.91, 23.54]
+    - [19.03, 26.38]
+    - [22.06, 28.90]
+    - [25.11, 31.52]
+    - [28.07, 34.18]
+    - [31.01, 36.86]
+    - [33.90, 39.49]
+    - [36.68, 42.11]
+    - [39.41, 44.68]
+    - [42.10, 47.32]
+    - [44.69, 49.94]
+    - [47.07, 52.51]
+    - [49.41, 54.90]
+    - [51.71, 57.12]
+    - [54.03, 59.24]
+    - [56.40, 61.36]
+    - [58.89, 63.50]
+    - [61.42, 65.70]
+    - [63.86, 67.87]
+    - [66.25, 70.00]
+    - [68.65, 72.08]
+    - [71.07, 74.16]
+    - [73.45, 76.31]
+    - [75.80, 78.52]
+    - [78.15, 80.83]
+    - [80.39, 83.08]
+    - [82.59, 85.10]
+    - [84.39, 87.01]
+    - [86.09, 88.89]
+    - [87.70, 90.72]
+    - [89.45, 92.46]
+    - [91.18, 93.88]
+    - [92.95, 94.92]
+    - [95.10, 96.02]
+    - [108.53, 110.44]
+  offsets:
+    - [0.00, 0.00]
+    - [0.00, 0.00]
+    - [0.00, 0.00]
+    - [0.00, 0.00]
+    - [0.00, 0.00]
+    - [0.00, 0.00]
+  spread: 1.0
+look_strength: 0.7
