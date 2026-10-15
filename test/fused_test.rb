@@ -78,6 +78,15 @@ class FusedTest < Minitest::Test
     assert_close Vips::Image.bandjoin([@b, @a[0]]), F.leaf(Vips::Image.bandjoin([@b, x[0]])), "a join through libvips"
   end
 
+  # The sky detector reads the orientation off the frame, and lost it found no
+  # sky in a portrait.
+  def test_the_frame_keeps_its_metadata
+    tagged = @a.copy(xres: 2.83, yres: 2.83).mutate { |m| m.set_type!(GObject::GINT_TYPE, "orientation", 6) }
+    worked = (F.leaf(tagged) * 0.5 + 0.1).gaussblur(1.0).vips
+    assert_equal 6, worked.get("orientation")
+    assert_in_delta 2.83, worked.xres, 1e-6
+  end
+
   def test_what_it_cannot_fuse_goes_to_libvips
     x = F.leaf(@a) * 2
     assert_close (@a * 2).resize(0.5), x.resize(0.5), "a resize"

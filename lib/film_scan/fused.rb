@@ -45,7 +45,7 @@ module FilmScan
 
     def self.leaf(image, memory: nil)
       new(:leaf, [], image: image, memory: memory, bands: image.bands, format: image.format, width: image.width,
-                     height: image.height, interpretation: image.interpretation)
+                     height: image.height, interpretation: image.interpretation, meta: image)
     end
 
     # Fused images in a call's arguments, as libvips takes them.
@@ -59,7 +59,7 @@ module FilmScan
     end
 
     def initialize(op, args, bands:, format:, width:, height:, interpretation: nil, extra: nil, image: nil,
-                   memory: nil)
+                   memory: nil, meta: nil)
       @op = op
       @args = args
       @extra = extra
@@ -70,6 +70,7 @@ module FilmScan
       @interpretation = interpretation
       @image = image
       @memory = memory
+      @meta = meta
     end
 
     def +(other) = arithmetic(:add, other)
@@ -259,7 +260,7 @@ module FilmScan
 
     def node(op, args, bands:, format:, extra: nil, interpretation: @interpretation)
       Fused.new(op, args, bands: bands, format: format, width: @width, height: @height,
-                          interpretation: interpretation, extra: extra)
+                          interpretation: interpretation, extra: extra, meta: @meta)
     end
 
     def operand?(value)
@@ -349,7 +350,7 @@ module FilmScan
       @memory = out
       image = Vips::Image.new_from_memory(out, @width, @height, @bands, :float)
       image = image.cast(@format) if RANGES.key?(@format)
-      @interpretation ? image.copy(interpretation: @interpretation) : image
+      described(image)
     end
 
     # Across, then down, each a pass of its own on the GPU.
@@ -367,7 +368,7 @@ module FilmScan
       end
       @memory = out
       image = Vips::Image.new_from_memory(out, @width, @height, @bands, :float)
-      @interpretation ? image.copy(interpretation: @interpretation) : image
+      described(image)
     end
 
     # The kernel for one pass of a convolution, read with each edge pixel
@@ -399,6 +400,22 @@ module FilmScan
           }
         METAL
       end
+    end
+
+    # Fields libvips keeps for itself, or sets from the pixels.
+    HEADER = %w[width height bands format coding interpretation xoffset yoffset xres yres filename].freeze
+
+    # The pixels with what libvips would have carried along with them: the
+    # header and metadata of the first image they came from, so a frame keeps
+    # its orientation, resolution and profile.
+    def described(image)
+      return @interpretation ? image.copy(interpretation: @interpretation) : image unless @meta
+
+      image = image.copy(interpretation: @interpretation || image.interpretation, xres: @meta.xres, yres: @meta.yres)
+      fields = @meta.get_fields.reject { |name| HEADER.include?(name) || name.start_with?("vips-") }
+      return image if fields.empty?
+
+      image.mutate { |m| fields.each { |name| m.set_type!(@meta.get_typeof(name), name, @meta.get(name)) } }
     end
 
     # Too many images for one kernel: each argument is worked out on its own
